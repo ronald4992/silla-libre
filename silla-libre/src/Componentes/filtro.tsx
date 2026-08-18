@@ -2,8 +2,10 @@ function Filtro () {
     return (
         <section className="seccion-filtro">
             <div className="contenedor-filtro">
+                <div className="titulo-filtro">
                 <span>FILTRAR RESTAURANTES</span>
                 <h2>Encuentra tu lugar ideal</h2>
+                </div>
            </div>
 
            <div className="filtros">
@@ -90,12 +92,31 @@ function Filtro () {
 
                 <div className="filtro">
 
-                    <label htmlFor="calificacion">
+                    <label htmlFor="clasificacion">
                         Calificación
                     </label>
+
+                    <select  id="clasificacion">
+                       
+                       <option value="">
+                        Cualquier calificaión
+                       </option>
+                       <option value="4">
+                        ★ 4.0 o superior
+                       </option>
+                       <option value="4.5">
+                        ★ 4.5 o superior
+                       </option>
+                       <option value="4.8">
+                        ★ 4.8 o superior
+                       </option>
+                    </select>
+
                 </div>
 
            </div>
         </section>
     )
 }
+
+export default Filtro;

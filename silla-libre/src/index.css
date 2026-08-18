@@ -216,3 +216,72 @@ body {
 .boton-busqueda:hover {
   background-color: var(--vinotinto-oscuro);
 }
+
+/* Filtro*/
+
+.seccion-filtro {
+  width: 100%;
+  padding:  20px 7% 70px;
+  background-color: var(--beige-claro);
+}
+
+.contenedor-filtro {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.titulo-filtro {
+  margin-bottom: 25px;
+}
+
+.titulo-filtro span {
+  color: var(--dorado);
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: bold;
+}
+
+.titulo-filtro h2 {
+  margin-top: 8px;
+  color: var(--vinotinto-oscuro);
+  font-family: Georgia, serif;
+  font-size: 32px;
+}
+
+.filtros {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  padding: 25px;
+  background-color: var(--blanco);
+  border-radius: 10px;
+  box-shadow: 0 8px 25px rgb(69, 19, 33, 0.88);
+}
+
+.filtro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filtro label {
+  color: var(--vinotinto-oscuro);
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.filtro select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: var(--blanco);
+  color: var(--vinotinto-oscuro);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.filtro select:focus {
+  border-color: var(--dorado);
+}
