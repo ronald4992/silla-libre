@@ -285,3 +285,152 @@ body {
 .filtro select:focus {
   border-color: var(--dorado);
 }
+
+/*Restaurantes*/
+
+.seccion-restaurantes {
+  width: 100%;
+  padding:  70px 7% 100px;
+  background-color: var(--beige-claro);
+}
+
+.cabezera-restaurantes {
+  max-width: 1200px;
+  margin: 0 auto 35px;
+}
+
+.cabezera-restaurantes span {
+  color: var(--dorado);
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: bold;
+}
+
+.cabezera-restaurantes h2 {
+  margin-top: 8px;
+  color: var(--vinotinto-oscuro);
+  font-family: Georgia, serif;
+  font-size: 38px;
+}
+
+.cabezera-restaurantes p {
+  margin-top: 10px;
+  color: #766f6a;
+  font-size: 15px;
+}
+
+.contenedor-tarjetas-restaurantes {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+/*Tarjeta*/
+
+.tarjeta-restaurante {
+  background-color: var(--blanco);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 25px rgba(69, 19, 33, 0.10);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.tarjeta-restaurante:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 15px 35px rgba(69, 19, 33, 0.15);
+}
+
+/*Imagen*/
+
+.imagen-restaurante {
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  position: relative;
+}
+
+.imagen-restaurante img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.categoria-restaurante {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background-color: var(--vinotinto);
+  color: var(--blanco);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+/*Contenido*/
+
+.contenido-restaurante {
+  padding: 20px;
+}
+
+.contenido-restaurante h3 {
+  margin: 0;
+  color: var(--vinotinto-oscuro);
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.locacion-restaurante {
+  margin-top: 7px;
+  color: #766f6a;
+  font-size: 11px;
+}
+
+.descripcion-restaurante {
+  margin-top: 12px;
+  color: #766f6a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/*Información*/
+
+.informacion-restaurante {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rating-restaurante {
+  color: var(--dorado);
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.precio-restaurante {
+  font-size: 10px;
+  color: #766f6a;
+}
+
+/*Botón*/
+
+.boton-reserva {
+  margin-top: 18px;
+  width: 100%;
+  padding: 11px;
+  background-color: var(--vinotinto);
+  color: var(--blanco);
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.boton-reserva:hover {
+  background-color: var(--vinotinto-oscuro);
+}
