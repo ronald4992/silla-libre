@@ -1,436 +1,62 @@
-:root {
-  --vinotinto: #691c32;
-  --vinotinto-oscuro: #451321;
-  --beige: #f1e4ce;
-  --beige-claro: #faf6ee;
-  --dorado: #c7a56a;
-  --blanco: #ffffff;
-}
-
-*{
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background-color: var(--beige-claro);
-  color: var(--vinotinto-oscuro);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-right: 80px;
-}
-.logo h1 {
-  margin: 0;
-  font-family: Georgia, serif;
-  font-size: 28px;
-  color: var(--beige);
-}
-
-.logo-proyecto {
-  width: 100px;
-  height: 100px;
-  object-fit: contain;
-  border-radius: 50%;
-  
-}
-
-.nombre-proyecto h1 {
-  margin: 0;
-  font-family: Georgia, serif;
-  font-size: 25px;
-  color: var(--beige);
-}
-
-.nombre-proyecto span {
-  display: block;
-  margin-top: 2px;
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: var(--dorado);
-}
-/*Barra de navegación*/
-
-.barra-navegacion {
-  width: 100%;
-  height: 80px;
-  padding: 0 6%;
-  background-color: var(--vinotinto);
-  display: flex;  
-  align-items: center;
-  justify-content: space-between;
-  color: var(--blanco);
-}
-
-
-.navegacion {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.navegacion a {
-  color: var(--beige);
-  text-decoration: none;
-  font-size: 32px;
-  transition: color 0.3s ease;
-  white-space: nowrap;
-}
-
-.navegacion a:hover {
-  color: var(--dorado);
-}
-
-.boton-barra-navegacion {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.boton-inicio-sesion,
-.boton-registro {
-  padding: 10px 18px;
-  border-radius: 5px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-.boton-inicio-sesion {
-  background-color: transparent;
-  color: var(--blanco);
-  border: 1px solid var(--beige);
-}
-
-.boton-inicio-sesion:hover {
-  background-color: var(--beige);
-  color: var(--vinotinto);
-}
-
-.boton-registro{
-  background-color: var(--dorado);
-  color: var(--vinotinto-oscuro);
-  border: 1px solid var(--dorado);
-  font-weight: bold;
-}
-
-.boton-registro:hover {
-  background-color: var(--beige);
-  border-color: var(--beige);
-}
-
-/* Eslogan */
-
-.eslogan{
-  min-height: 500px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 60px 20px;
-  background-color: var(--vinotinto);
-  color: var(--blanco);
-}
-
-.eslogan p {
-  margin: 0 0 20px 0;
-  color: var(--dorado);
-  font-size: 14px;
-  letter-spacing: 4px;
-  
-}
-
-.eslogan h2 {
-  margin: 0 0 25px 0;
-  color: var(--beige);
-  font-size: 52px;
-  font-weight: 700px;
-  line-height: 1.2;
-  display: block;
-}
-
-.eslogan span {
-  display: block;
-  max-width: 600px;
-  margin: 0 auto;
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--beige);
-}
-
-/* Barra de busqueda*/
-
-.barra-busqueda {
-  width: 80%;
-  max-width: 1000px;
-  margin: -35px auto 50px;
-  padding: 15px;
-  background-color: var(--blanco);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-  position: relative;
-  z-index: 10;
-}
-
-.campo-busqueda {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 15px;
-}
-
-.campo-busqueda span {
-  font-size: 18px;
-}
-
-.campo-busqueda input {
-  width: 100%;
-  border: none;
-  outline: none;
-  font-size: 15px;
-  color: var(--vinotinto-oscuro);
-}
-
-.boton-busqueda {
-  padding: 14px 30px;
-  border: none;
-  border-radius: 6px;
-  background-color: var(--vinotinto);
-  color: var(--blanco);
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.boton-busqueda:hover {
-  background-color: var(--vinotinto-oscuro);
-}
-
-/* Filtro*/
-
-.seccion-filtro {
-  width: 100%;
-  padding:  20px 7% 70px;
-  background-color: var(--beige-claro);
-}
-
-.contenedor-filtro {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.titulo-filtro {
-  margin-bottom: 25px;
-}
-
-.titulo-filtro span {
-  color: var(--dorado);
-  font-size: 11px;
-  letter-spacing: 3px;
-  font-weight: bold;
-}
-
-.titulo-filtro h2 {
-  margin-top: 8px;
-  color: var(--vinotinto-oscuro);
-  font-family: Georgia, serif;
-  font-size: 32px;
-}
-
-.filtros {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  padding: 25px;
-  background-color: var(--blanco);
-  border-radius: 10px;
-  box-shadow: 0 8px 25px rgb(69, 19, 33, 0.88);
-}
-
-.filtro {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.filtro label {
-  color: var(--vinotinto-oscuro);
-  font-size: 12px;
-  font-weight: bold;
-}
-
-.filtro select {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  background-color: var(--blanco);
-  color: var(--vinotinto-oscuro);
-  font-size: 12px;
-  outline: none;
-  cursor: pointer;
-}
-
-.filtro select:focus {
-  border-color: var(--dorado);
-}
-
-/*Restaurantes*/
-
-.seccion-restaurantes {
-  width: 100%;
-  padding:  70px 7% 100px;
-  background-color: var(--beige-claro);
-}
-
-.cabezera-restaurantes {
-  max-width: 1200px;
-  margin: 0 auto 35px;
-}
-
-.cabezera-restaurantes span {
-  color: var(--dorado);
-  font-size: 11px;
-  letter-spacing: 3px;
-  font-weight: bold;
-}
-
-.cabezera-restaurantes h2 {
-  margin-top: 8px;
-  color: var(--vinotinto-oscuro);
-  font-family: Georgia, serif;
-  font-size: 38px;
-}
-
-.cabezera-restaurantes p {
-  margin-top: 10px;
-  color: #766f6a;
-  font-size: 15px;
-}
-
-.contenedor-tarjetas-restaurantes {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-/*Tarjeta*/
-
-.tarjeta-restaurante {
-  background-color: var(--blanco);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 8px 25px rgba(69, 19, 33, 0.10);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.tarjeta-restaurante:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 15px 35px rgba(69, 19, 33, 0.15);
-}
-
-/*Imagen*/
-
-.imagen-restaurante {
-  width: 100%;
-  height: 200px;
-  overflow: hidden;
-  position: relative;
-}
-
-.imagen-restaurante img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.categoria-restaurante {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  background-color: var(--vinotinto);
-  color: var(--blanco);
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 10px;
-}
-
-/*Contenido*/
-
-.contenido-restaurante {
-  padding: 20px;
-}
-
-.contenido-restaurante h3 {
-  margin: 0;
-  color: var(--vinotinto-oscuro);
-  font-family: Georgia, serif;
-  font-size: 22px;
-}
-
-.locacion-restaurante {
-  margin-top: 7px;
-  color: #766f6a;
-  font-size: 11px;
-}
-
-.descripcion-restaurante {
-  margin-top: 12px;
-  color: #766f6a;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-/*Información*/
-
-.informacion-restaurante {
-  margin-top: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.rating-restaurante {
-  color: var(--dorado);
-  font-size: 13px;
-  font-weight: bold;
-}
-
-.precio-restaurante {
-  font-size: 10px;
-  color: #766f6a;
-}
-
-/*Botón*/
-
-.boton-reserva {
-  margin-top: 18px;
-  width: 100%;
-  padding: 11px;
-  background-color: var(--vinotinto);
-  color: var(--blanco);
-  border: none;
-  border-radius: 5px;
-  font-size: 12px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.boton-reserva:hover {
-  background-color: var(--vinotinto-oscuro);
-}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap');
+
+:root { --vino: #651f36; --vino-profundo: #3b1725; --vino-claro: #8d3c55; --dorado: #d9b978; --crema: #f8f4ed; --hueso: #eee7dc; --tinta: #272221; --gris: #776f6b; --blanco: #fffdf9; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--crema); color: var(--tinta); font-family: 'DM Sans', sans-serif; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--dorado); outline-offset: 3px; }
+.aplicacion { overflow: hidden; }
+.barra-navegacion { height: 112px; padding: 0 6vw; display: flex; align-items: center; justify-content: space-between; background: var(--vino-profundo); color: var(--blanco); }
+.marca { border: 0; padding: 0; display: flex; align-items: center; gap: 12px; color: var(--blanco); background: none; text-align: left; }
+.logo-imagen { width: 92px; height: 88px; object-fit: contain; object-position: center; border: 1px solid var(--dorado); background: var(--vino-profundo); }
+.marca strong, .marca small { display: block; }
+.marca strong { font: 600 25px 'Playfair Display', serif; letter-spacing: .2px; }
+.marca small { margin-top: 2px; color: #c7a9ad; font-size: 9px; letter-spacing: 1.3px; text-transform: uppercase; }
+.navegacion { display: flex; gap: 32px; margin-left: 8vw; }
+.navegacion button, .enlace-boton { padding: 7px 0; border: 0; color: #d5c2c4; background: transparent; font-size: 13px; }
+.navegacion button { position: relative; }
+.navegacion button::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 1px; background: var(--dorado); transition: width .25s ease; }
+.navegacion button:hover::after, .navegacion button.activo::after { width: 100%; }
+.navegacion button.activo, .navegacion button:hover, .enlace-boton:hover { color: var(--blanco); }
+.acciones-navegacion { display: flex; align-items: center; gap: 23px; }
+.boton { border: 1px solid transparent; padding: 13px 19px; transition: transform .2s, background .2s, border .2s; }
+.boton:hover { transform: translateY(-2px); }
+.boton-dorado { color: var(--vino-profundo); background: var(--dorado); border-color: var(--dorado); font-weight: 700; }
+.boton-vino { color: var(--blanco); background: var(--vino); border-color: var(--vino); font-weight: 600; }
+.boton-transparente { color: var(--blanco); background: transparent; border-color: #aa8991; }
+.boton.grande { padding: 16px 23px; }
+.boton span { margin-left: 12px; }
+.perfil { display: flex; align-items: center; gap: 7px; border: 0; color: var(--blanco); background: none; font-size: 11px; }
+.perfil span { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: var(--vino-profundo); background: var(--dorado); font-weight: 700; }
+.hero { min-height: 650px; padding: 76px 8vw 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 6vw; align-items: center; color: var(--blanco); background: var(--vino-profundo); }
+.hero-contenido { max-width: 590px; animation: aparecer .7s ease both; }
+.sobretitulo { margin: 0 0 19px; color: var(--dorado); font-size: 10px; letter-spacing: 2.6px; font-weight: 700; }
+.sobretitulo.oscuro { color: var(--vino); }
+h1, h2, h3, p { margin-top: 0; }
+h1, h2 { font-family: 'Playfair Display', serif; font-weight: 500; }
+h1 { margin-bottom: 22px; font-size: clamp(45px, 5vw, 75px); line-height: 1.03; letter-spacing: -1.7px; }
+h1 em, h2 em { color: var(--dorado); font-weight: 500; }
+.hero-descripcion { max-width: 440px; margin-bottom: 34px; color: #d8c7c5; line-height: 1.75; font-size: 15px; }
+.hero-acciones { display: flex; gap: 13px; flex-wrap: wrap; }
+.prueba-social { display: flex; align-items: center; gap: 13px; margin-top: 55px; color: #b99da0; font-size: 11px; }
+.prueba-social strong { color: var(--blanco); font-weight: 600; }
+.avatares { display: flex; }
+.avatares span { width: 28px; height: 28px; margin-right: -7px; display: grid; place-items: center; border: 2px solid var(--vino-profundo); border-radius: 50%; color: var(--vino-profundo); background: #dabbb1; font-size: 8px; font-weight: 700; }
+.avatares span:nth-child(2) { background: #b6c0b2; }.avatares span:nth-child(3) { background: #e0c88e; }.avatares span:nth-child(4) { color: #d8c7c5; background: var(--vino); }
+.hero-imagen { height: 480px; position: relative; }
+.hero-foto { height: 100%; background: linear-gradient(90deg, rgba(59,23,37,.25), transparent), url('https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=1100&q=85') center/cover; }
+.hero-imagen::before { content: ''; width: 130px; height: 130px; position: absolute; top: -20px; right: -20px; border-top: 1px solid var(--dorado); border-right: 1px solid var(--dorado); z-index: 1; }
+.nota-hero { position: absolute; left: -30px; bottom: 30px; width: 204px; padding: 17px; background: var(--blanco); color: var(--tinta); box-shadow: 0 12px 28px #27131d55; }.nota-hero span { display: block; color: var(--vino); font-size: 21px; }.nota-hero strong, .nota-hero small { display: block; }.nota-hero strong { margin: 8px 0 4px; font: 600 15px 'Playfair Display'; }.nota-hero small { color: var(--gris); font-size: 10px; }
+.buscador-seccion, .listado, .mapa-seccion { padding: 100px 8vw; }
+.buscador-seccion { background: var(--blanco); }.encabezado-seccion, .encabezado-listado { display: flex; justify-content: space-between; align-items: end; gap: 40px; }.encabezado-seccion h2, .mapa-seccion h2, .cta-restaurante h2 { margin-bottom: 0; font-size: 47px; line-height: 1.05; color: var(--vino-profundo); }.encabezado-seccion h2 em, .mapa-seccion h2 em, .encabezado-listado h2 em, .cta-restaurante h2 em { color: var(--vino-claro); }.texto-seccion { max-width: 310px; margin: 0 4vw 5px 0; color: var(--gris); font-size: 13px; line-height: 1.8; }
+.buscador { max-width: 1060px; min-height: 70px; margin-top: 47px; padding: 10px 10px 10px 20px; display: flex; align-items: center; gap: 12px; border: 1px solid #dfd6c9; background: var(--crema); }.icono { color: var(--vino); font-size: 28px; }.buscador input { min-width: 150px; flex: 1; border: 0; outline: 0; color: var(--tinta); background: transparent; font-size: 13px; }.buscador select { padding: 14px; border: 0; border-left: 1px solid #dcd2c7; outline: 0; color: var(--gris); background: transparent; font-size: 12px; }.etiquetas { display: flex; gap: 16px; align-items: center; margin-top: 19px; color: #a39a92; font-size: 11px; }.etiquetas button { padding: 5px 12px; border: 1px solid #ddd2c8; color: var(--gris); background: transparent; font-size: 11px; }.etiquetas button:hover { border-color: var(--vino); color: var(--vino); }
+.listado { background: var(--crema); }.contador { color: var(--vino); font-size: 10px; letter-spacing: 1.7px; text-transform: uppercase; }.encabezado-listado h2 { margin: 17px 0 0; color: var(--vino-profundo); font-size: 40px; }.boton-texto { padding: 0 0 7px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; }.boton-texto span { margin-left: 14px; font-size: 18px; }.tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 45px; }.tarjeta-restaurante { background: var(--blanco); }.imagen-tarjeta { height: 220px; position: relative; overflow: hidden; }.imagen-tarjeta img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .5s ease; }.tarjeta-restaurante:hover img { transform: scale(1.04); }.etiqueta-categoria { position: absolute; left: 15px; bottom: 15px; padding: 6px 10px; color: var(--blanco); background: var(--vino); font-size: 9px; letter-spacing: .5px; }.favorito { position: absolute; top: 12px; right: 12px; width: 31px; height: 31px; border: 0; border-radius: 50%; color: var(--vino); background: var(--blanco); font-size: 20px; line-height: 1; }.contenido-tarjeta { padding: 22px 20px 23px; }.fila-tarjeta { display: flex; justify-content: space-between; gap: 10px; }.fila-tarjeta h3 { margin-bottom: 8px; color: var(--vino-profundo); font: 600 22px 'Playfair Display'; }.calificacion { color: #bd8f35; font-size: 12px; }.ubicacion { margin-bottom: 17px; color: var(--vino-claro); font-size: 11px; }.ubicacion span { margin: 0 5px; color: #c9beb5; }.contenido-tarjeta > p:not(.ubicacion) { min-height: 48px; color: var(--gris); font-size: 12px; line-height: 1.65; }.reservar-enlace { padding: 0 0 3px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; }.reservar-enlace span { margin-left: 12px; }
+.mapa-seccion { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8vw; align-items: center; background: var(--hueso); }.mapa-seccion .texto-seccion { margin: 25px 0 28px; }.mapa { height: 330px; position: relative; overflow: hidden; background: #ddd6c9; }.mapa-interactivo { width: 100%; height: 100%; }.mapa-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--vino); background: radial-gradient(circle at center, #eadfcd99, #c9bba855), url('https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&w=1200&q=70') center/cover; }.mapa-fallback span { font-size: 42px; }.mapa-fallback strong { font: 20px 'Playfair Display'; }.mapa-fallback small { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }.mapa-interactivo:not(:empty) + .mapa-fallback { display: none; }
+.cta-restaurante { padding: 75px 8vw; display: flex; align-items: center; justify-content: space-between; gap: 30px; color: var(--blanco); background: var(--vino); }.cta-restaurante h2 { color: var(--blanco); }.cta-restaurante h2 em { color: var(--dorado); }.cta-restaurante p:last-child { margin: 19px 0 0; color: #d8c5c7; font-size: 13px; }
+footer { padding: 28px 8vw; display: flex; justify-content: space-between; color: #ad9c9a; background: var(--vino-profundo); font-size: 10px; }.marca-footer { color: var(--dorado); font: 20px 'Playfair Display'; }
+.fondo-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #27151dcc; animation: aparecer .2s ease; }.modal { width: min(510px, 100%); max-height: 92vh; overflow-y: auto; position: relative; padding: 40px; background: var(--blanco); box-shadow: 0 22px 70px #21141b66; }.cerrar-modal { position: absolute; top: 15px; right: 19px; border: 0; color: var(--gris); background: none; font-size: 27px; }.icono-modal { display: block; margin-bottom: 12px; color: var(--vino); font-size: 22px; }.encabezado-modal h2 { margin: 0 0 9px; color: var(--vino-profundo); font-size: 36px; }.encabezado-modal > p:last-child { margin-bottom: 24px; color: var(--gris); font-size: 12px; }.pestanas-modal { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 20px; border-bottom: 1px solid #dfd6cc; }.pestanas-modal button { padding: 12px; border: 0; border-bottom: 2px solid transparent; color: var(--gris); background: none; font-size: 12px; }.pestanas-modal button.seleccionada { border-color: var(--vino); color: var(--vino); font-weight: 700; }.formulario { display: grid; gap: 15px; }.formulario label { display: grid; gap: 7px; color: var(--tinta); font-size: 11px; font-weight: 600; }.formulario input, .formulario select { width: 100%; padding: 13px 12px; border: 1px solid #d9d0c5; border-radius: 0; outline: 0; color: var(--tinta); background: var(--crema); font-size: 12px; }.formulario input:focus, .formulario select:focus { border-color: var(--vino); }.boton-formulario { width: 100%; margin-top: 5px; }.campos-dobles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.aviso, .mensaje-modal { padding: 11px 13px; color: var(--vino); background: #f5ebdc; font-size: 11px; line-height: 1.5; }.mensaje-modal { margin: 18px 0 0; border-left: 3px solid var(--dorado); }.separador-formulario { padding-top: 5px; color: var(--vino); border-top: 1px solid #ded5ca; font-size: 9px; letter-spacing: 1.5px; }.carga-archivo { padding: 13px; border: 1px dashed #c9b9aa; background: var(--crema); }.carga-archivo input { display: none; }.carga-archivo span { color: var(--gris); font-weight: 400; }
+@keyframes aparecer { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 900px) { .navegacion { margin-left: 0; gap: 17px; }.acciones-navegacion .enlace-boton { display: none; }.hero { grid-template-columns: 1fr; padding-top: 60px; }.hero-imagen { height: 360px; max-width: 650px; width: 100%; }.tarjetas { grid-template-columns: repeat(2, 1fr); }.mapa-seccion { grid-template-columns: 1fr; gap: 35px; }.mapa { height: 280px; }.cta-restaurante { align-items: start; flex-direction: column; } }
+@media (max-width: 620px) { .barra-navegacion { height: auto; padding: 18px 5vw; flex-wrap: wrap; gap: 17px; }.navegacion { order: 3; width: 100%; justify-content: space-between; }.acciones-navegacion { margin-left: auto; }.acciones-navegacion .boton { padding: 10px 12px; font-size: 11px; }.hero { min-height: auto; padding: 57px 7vw 75px; }.hero-imagen { height: 290px; }.nota-hero { left: 10px; bottom: 15px; }.buscador-seccion, .listado, .mapa-seccion { padding: 65px 7vw; }.encabezado-seccion, .encabezado-listado { display: block; }.encabezado-seccion h2, .mapa-seccion h2, .cta-restaurante h2 { font-size: 39px; }.texto-seccion { margin: 25px 0 0; }.buscador { align-items: stretch; flex-wrap: wrap; padding: 14px; }.buscador input { min-width: calc(100% - 40px); }.buscador select { width: 100%; border-top: 1px solid #dcd2c7; border-left: 0; }.buscador .boton { width: 100%; }.etiquetas { flex-wrap: wrap; }.boton-texto { margin-top: 22px; }.tarjetas { grid-template-columns: 1fr; }.imagen-tarjeta { height: 230px; }.cta-restaurante { padding: 60px 7vw; }footer { padding: 26px 7vw; flex-wrap: wrap; gap: 13px; }.modal { padding: 31px 22px; }.encabezado-modal h2 { font-size: 31px; } }
