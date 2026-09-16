@@ -11,7 +11,7 @@ export const restaurantes: Restaurante [] = [
         imagen: "https://osakanikkei.com/wp-content/uploads/2026/07/osaka-restaurante-bogota-1.webp",
         descripcion: 
             "Una experiencia que una la precisión de la cocina japonesa con los sabores de Perú.",
-        urlreserva: "https://osakanikkei.com/bogota/book/"
+        urlreserva: "https://osakanikkei.com/bogota/"
     },
 
     {
