@@ -7,7 +7,7 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { restaurantes } from "./datos/restaurante";
 import {
@@ -22,8 +22,98 @@ import {
   type DatosReserva,
 } from "./servicios/reservas";
 
-type Pestaña = "inicio" | "restaurantes" | "reservas";
+type Pestaña = "inicio" | "restaurantes" | "reservas" | "perfil";
 type TipoCuenta = "usuario" | "restaurante";
+function FormularioPerfil({
+  usuario,
+  nombre,
+  cambiarNombre,
+  telefono,
+  cambiarTelefono,
+  foto,
+  cambiarFoto,
+  guardar,
+  cargando,
+}: {
+  usuario: User;
+  nombre: string;
+  cambiarNombre: (valor: string) => void;
+  telefono: string;
+  cambiarTelefono: (valor: string) => void;
+  foto: string;
+  cambiarFoto: (archivo: File | undefined) => void;
+  guardar: (evento: React.FormEvent<HTMLFormElement>) => void;
+  cargando: boolean;
+}) {
+  return (
+    <div className="perfil-grid">
+      <aside className="perfil-identidad">
+        <div className="avatar-grande">
+          {foto ? <img src={foto} alt="Foto de perfil" /> : (nombre || usuario.email || "U").slice(0, 1).toUpperCase()}
+        </div>
+        <label className="boton boton-vino boton-foto">
+          Cambiar foto
+          <input type="file" accept="image/*" onChange={(evento) => cambiarFoto(evento.target.files?.[0])} />
+        </label>
+        <p>JPG o PNG · máximo 5 MB</p>
+      </aside>
+      <form className="formulario perfil-formulario" onSubmit={guardar}>
+        <div className="separador-formulario"><span>DATOS PERSONALES</span></div>
+        <label>
+          Nombre
+          <input value={nombre} onChange={(evento) => cambiarNombre(evento.target.value)} placeholder="Tu nombre" required />
+        </label>
+        <label>
+          Correo electrónico
+          <input value={usuario.email ?? ""} type="email" disabled />
+        </label>
+        <label>
+          Número de celular
+          <input value={telefono} onChange={(evento) => cambiarTelefono(evento.target.value)} type="tel" placeholder="+57 300 000 0000" />
+        </label>
+        <button className="boton boton-vino boton-formulario" disabled={cargando}>
+          {cargando ? "Guardando..." : "Guardar cambios ↗"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function PanelRestaurante({ reservas }: { reservas: ReservaPerfil[] }) {
+  const reservasDemo: ReservaPerfil[] = [
+    { restaurante: "Tu restaurante", fecha: "2026-09-24", hora: "19:30", personas: 4, correo: "ana@correo.com", estado: "Confirmada" },
+    { restaurante: "Tu restaurante", fecha: "2026-09-25", hora: "20:00", personas: 2, correo: "luis@correo.com", estado: "Confirmada" },
+    { restaurante: "Tu restaurante", fecha: "2026-09-27", hora: "13:00", personas: 3, correo: "sofia@correo.com", estado: "Pendiente" },
+    { restaurante: "Tu restaurante", fecha: "2026-09-27", hora: "20:30", personas: 5, correo: "carlos@correo.com", estado: "Confirmada" },
+  ];
+  const datos = reservas.length ? reservas : reservasDemo;
+  const porDia = datos.reduce<Record<string, number>>((total, reserva) => {
+    total[reserva.fecha] = (total[reserva.fecha] ?? 0) + 1;
+    return total;
+  }, {});
+  const porHora = datos.reduce<Record<string, number>>((total, reserva) => {
+    const hora = reserva.hora.slice(0, 2);
+    total[hora] = (total[hora] ?? 0) + 1;
+    return total;
+  }, {});
+  const mayorDia = Math.max(...Object.values(porDia), 1);
+  const mayorHora = Math.max(...Object.values(porHora), 1);
+  return (
+    <div className="panel-restaurante">
+      <div className="resumen-reservas">
+        <div><span>RESERVAS TOTALES</span><strong>{datos.length}</strong><small>Últimos movimientos</small></div>
+        <div><span>PERSONAS ATENDIDAS</span><strong>{datos.reduce((total, reserva) => total + reserva.personas, 0)}</strong><small>En reservas registradas</small></div>
+        <div><span>HORA MÁS SOLICITADA</span><strong>{Object.entries(porHora).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "--"}:00</strong><small>Franja con más demanda</small></div>
+      </div>
+      <div className="estadisticas-grid">
+        <div className="estadistica"><div className="titulo-estadistica"><span>Reservas por día</span><small>Actividad reciente</small></div>{Object.entries(porDia).map(([dia, cantidad]) => <div className="barra-estadistica" key={dia}><span>{new Date(`${dia}T12:00:00`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric" })}</span><div><i style={{ width: `${(cantidad / mayorDia) * 100}%` }} /></div><strong>{cantidad}</strong></div>)}</div>
+        <div className="estadistica"><div className="titulo-estadistica"><span>Horas más reservadas</span><small>Distribución del servicio</small></div>{Object.entries(porHora).sort().map(([hora, cantidad]) => <div className="barra-estadistica" key={hora}><span>{hora}:00</span><div><i className="barra-dorada" style={{ width: `${(cantidad / mayorHora) * 100}%` }} /></div><strong>{cantidad}</strong></div>)}</div>
+      </div>
+      <div className="tabla-reservas"><div className="titulo-estadistica"><span>Reservas recientes</span><small>Gestiona la llegada de tus clientes</small></div><div className="lista-reservas">{datos.map((reserva, indice) => <div className="fila-reserva" key={`${reserva.fecha}-${reserva.hora}-${indice}`}><strong>{reserva.fecha}</strong><span>{reserva.hora} · {reserva.personas} {reserva.personas === 1 ? "persona" : "personas"}</span><small>{reserva.correo}</small><em className={reserva.estado === "Pendiente" ? "pendiente" : "confirmada"}>{reserva.estado}</em></div>)}</div></div>
+    </div>
+  );
+}
+
 type Modal = "acceso" | "reserva" | null;
 interface FormularioReserva {
   fecha: string;
@@ -36,6 +126,9 @@ interface FormularioRestaurante {
   comida: string;
   certificado: File | null;
 }
+interface ReservaPerfil extends DatosReserva {
+  estado?: string;
+}
 const reservaInicial: FormularioReserva = {
   fecha: "",
   hora: "",
@@ -47,6 +140,16 @@ const restauranteInicial: FormularioRestaurante = {
   comida: "",
   certificado: null,
 };
+function leerPerfilGuardado() {
+  const guardado = localStorage.getItem("silla-libre-perfil");
+  return guardado
+    ? (JSON.parse(guardado) as { tipo?: TipoCuenta; telefono?: string; foto?: string })
+    : {};
+}
+function leerReservasGuardadas(): ReservaPerfil[] {
+  const guardado = localStorage.getItem("silla-libre-reservas");
+  return guardado ? JSON.parse(guardado) : [];
+}
 
 function App() {
   const [pestaña, setPestaña] = useState<Pestaña>("inicio");
@@ -57,6 +160,10 @@ function App() {
   const [correo, setCorreo] = useState("");
   const [contraseña, setContraseña] = useState("");
   const [usuario, setUsuario] = useState<User | null>(null);
+  const [tipoUsuario, setTipoUsuario] = useState<TipoCuenta>(() => leerPerfilGuardado().tipo ?? "usuario");
+  const [telefono, setTelefono] = useState(() => leerPerfilGuardado().telefono ?? "");
+  const [fotoPerfil, setFotoPerfil] = useState(() => leerPerfilGuardado().foto ?? "");
+  const [reservasPerfil, setReservasPerfil] = useState<ReservaPerfil[]>(leerReservasGuardadas);
   const [reserva, setReserva] = useState<FormularioReserva>(reservaInicial);
   const [restauranteActivo, setRestauranteActivo] = useState(restaurantes[0]);
   const [busqueda, setBusqueda] = useState("");
@@ -71,6 +178,10 @@ function App() {
     if (!autenticacion) return;
     return onAuthStateChanged(autenticacion, setUsuario);
   }, []);
+  useEffect(() => {
+    if (pestaña === "perfil")
+      document.getElementById("perfil")?.scrollIntoView({ behavior: "smooth" });
+  }, [pestaña]);
   const restaurantesFiltrados = useMemo(
     () =>
       restaurantes.filter((restaurante) => {
@@ -119,6 +230,11 @@ function App() {
         await updateProfile(credencial.user, {
           displayName: nombreUsuario.trim(),
         });
+        setTipoUsuario(tipoCuenta);
+        localStorage.setItem(
+          "silla-libre-perfil",
+          JSON.stringify({ tipo: tipoCuenta, telefono: "", foto: "" }),
+        );
         setUsuario(credencial.user);
         setMensaje("Tu cuenta fue creada correctamente.");
       } else {
@@ -193,6 +309,13 @@ function App() {
           usuario: usuario?.uid ?? "invitado",
           creadoEn: serverTimestamp(),
         });
+      const reservaGuardada = { ...datos, estado: "Confirmada" };
+      const reservasActualizadas = [...reservasPerfil, reservaGuardada];
+      setReservasPerfil(reservasActualizadas);
+      localStorage.setItem(
+        "silla-libre-reservas",
+        JSON.stringify(reservasActualizadas),
+      );
       crearEventoCalendario(datos);
       await avisarReserva(datos).catch(() => undefined);
       setReserva(reservaInicial);
@@ -206,6 +329,38 @@ function App() {
     } finally {
       setCargando(false);
     }
+  };
+  const guardarPerfil = async (evento: React.FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    if (!usuario) return;
+    setCargando(true);
+    try {
+      await updateProfile(usuario, {
+        displayName: nombreUsuario.trim() || usuario.displayName || "",
+        photoURL: fotoPerfil || usuario.photoURL,
+      });
+      if (baseDatos)
+        await setDoc(
+          doc(baseDatos, "perfiles", usuario.uid),
+          { nombre: nombreUsuario.trim(), telefono, foto: fotoPerfil, tipo: tipoUsuario },
+          { merge: true },
+        );
+      localStorage.setItem(
+        "silla-libre-perfil",
+        JSON.stringify({ tipo: tipoUsuario, telefono, foto: fotoPerfil }),
+      );
+      setMensaje("Perfil actualizado correctamente.");
+    } catch {
+      setMensaje("No pudimos actualizar tu perfil. Inténtalo de nuevo.");
+    } finally {
+      setCargando(false);
+    }
+  };
+  const cambiarFoto = (archivo: File | undefined) => {
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = () => setFotoPerfil(String(lector.result));
+    lector.readAsDataURL(archivo);
   };
 
   return (
@@ -241,12 +396,18 @@ function App() {
           >
             Mis reservas
           </button>
+          <button
+            className={pestaña === "perfil" ? "activo" : ""}
+            onClick={() => (usuario ? navegar("perfil") : mostrarAcceso())}
+          >
+            Mi perfil
+          </button>
         </nav>
         <div className="acciones-navegacion">
           {usuario ? (
-            <button className="perfil" onClick={() => signOut(autenticacion!)}>
-              <span>{usuario.email?.slice(0, 1).toUpperCase()}</span>{" "}
-              {usuario.email}
+            <button className="perfil" onClick={() => navegar("perfil")}>
+              <span>{(usuario.displayName ?? usuario.email)?.slice(0, 1).toUpperCase()}</span>{" "}
+              {usuario.displayName || usuario.email}
             </button>
           ) : (
             <button className="enlace-boton" onClick={() => mostrarAcceso()}>
@@ -466,6 +627,37 @@ function App() {
             Registrar mi restaurante <span>↗</span>
           </button>
         </section>
+        {pestaña === "perfil" && usuario && (
+          <section className="perfil-seccion" id="perfil">
+            <div className="perfil-encabezado">
+              <div>
+                <p className="sobretitulo oscuro">ESPACIO PERSONAL</p>
+                <h2>{tipoUsuario === "restaurante" ? "Tu negocio, en control." : "Tu perfil, a tu manera."}</h2>
+                <p className="texto-seccion">
+                  {tipoUsuario === "restaurante"
+                    ? "Revisa el movimiento de tu restaurante y entiende cuándo llegan tus clientes."
+                    : "Mantén tus datos listos para reservar y disfrutar sin interrupciones."}
+                </p>
+              </div>
+              <button className="boton-texto" onClick={() => signOut(autenticacion!)}>Cerrar sesión <span>↗</span></button>
+            </div>
+            {tipoUsuario === "restaurante" ? (
+              <PanelRestaurante reservas={reservasPerfil} />
+            ) : (
+              <FormularioPerfil
+                usuario={usuario}
+                nombre={nombreUsuario || usuario.displayName || ""}
+                cambiarNombre={setNombreUsuario}
+                telefono={telefono}
+                cambiarTelefono={setTelefono}
+                foto={fotoPerfil || usuario.photoURL || ""}
+                cambiarFoto={cambiarFoto}
+                guardar={guardarPerfil}
+                cargando={cargando}
+              />
+            )}
+          </section>
+        )}
       </main>
       <footer>
         <span className="marca-footer">Silla Libre</span>
