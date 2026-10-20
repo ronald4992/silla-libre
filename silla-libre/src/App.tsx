@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -140,6 +141,34 @@ const restauranteInicial: FormularioRestaurante = {
   comida: "",
   certificado: null,
 };
+function mensajeErrorAcceso(error: unknown): string {
+  if (!(error instanceof FirebaseError)) {
+    return "No pudimos completar el acceso. Inténtalo de nuevo.";
+  }
+
+  switch (error.code) {
+    case "auth/email-already-in-use":
+      return "Ya existe una cuenta con ese correo. Inicia sesión o usa otro correo.";
+    case "auth/invalid-email":
+      return "El correo electrónico no tiene un formato válido.";
+    case "auth/weak-password":
+      return "La contraseña debe tener al menos 6 caracteres.";
+    case "auth/operation-not-allowed":
+      return "El registro por correo está desactivado. Activa Correo/Contraseña en Firebase Authentication.";
+    case "auth/network-request-failed":
+      return "No pudimos conectar con Firebase. Revisa tu conexión e inténtalo de nuevo.";
+    case "auth/too-many-requests":
+      return "Se hicieron demasiados intentos. Espera un momento antes de volver a intentarlo.";
+    default:
+      if (
+        error.code === "auth/invalid-api-key" ||
+        error.code.includes("api-key-not-valid")
+      ) {
+        return "La clave de Firebase no es válida o está restringida. Verifica VITE_FIREBASE_API_KEY en .env.local y que la clave permita Identity Toolkit.";
+      }
+      return "No pudimos completar el acceso. Revisa los datos e inténtalo de nuevo.";
+  }
+}
 function leerPerfilGuardado() {
   const guardado = localStorage.getItem("silla-libre-perfil");
   return guardado
@@ -227,24 +256,28 @@ function App() {
           correo,
           contraseña,
         );
-        await updateProfile(credencial.user, {
-          displayName: nombreUsuario.trim(),
-        });
         setTipoUsuario(tipoCuenta);
         localStorage.setItem(
           "silla-libre-perfil",
           JSON.stringify({ tipo: tipoCuenta, telefono: "", foto: "" }),
         );
         setUsuario(credencial.user);
-        setMensaje("Tu cuenta fue creada correctamente.");
+        try {
+          await updateProfile(credencial.user, {
+            displayName: nombreUsuario.trim(),
+          });
+          setMensaje("Tu cuenta fue creada correctamente.");
+        } catch {
+          setMensaje(
+            "Tu cuenta fue creada, pero no pudimos guardar el nombre. Puedes actualizarlo desde tu perfil.",
+          );
+        }
       } else {
         await signInWithEmailAndPassword(autenticacion, correo, contraseña);
         setModal(null);
       }
-    } catch {
-      setMensaje(
-        "No pudimos completar el acceso. Revisa tu correo y contraseña.",
-      );
+    } catch (error) {
+      setMensaje(mensajeErrorAcceso(error));
     } finally {
       setCargando(false);
     }
