@@ -8,14 +8,31 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
-import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+import {
+  getDownloadURL,
+  ref,
+  uploadBytesResumable,
+  type StorageReference,
+  type UploadTaskSnapshot,
+} from "firebase/storage";
 import { restaurantes } from "./datos/restaurante";
+import type { Restaurante } from "./tipos/restaurantes";
 import {
   autenticacion,
   almacenamiento,
   baseDatos,
-  firebaseDisponible,
 } from "./servicios/firebase";
 import {
   avisarReserva,
@@ -25,10 +42,33 @@ import {
 
 type Pestaña = "inicio" | "restaurantes" | "reservas" | "perfil";
 type TipoCuenta = "usuario" | "restaurante";
+interface PlatoMenu {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  precio: string;
+}
+interface RestaurantePropietario {
+  id: string;
+  nombre: string;
+  direccion: string;
+  comida: string;
+  certificado: string;
+  menu: PlatoMenu[];
+  menuPdfUrl: string;
+  menuPdfNombre: string;
+}
 function FormularioPerfil({
   usuario,
   nombre,
   cambiarNombre,
+  apellido = "",
+  cambiarApellido,
+  tratamiento = "ninguno",
+  cambiarTratamiento,
+  fechaNacimiento = "",
+  cambiarFechaNacimiento,
+  mostrarDatosComensal = false,
   telefono,
   cambiarTelefono,
   foto,
@@ -39,6 +79,13 @@ function FormularioPerfil({
   usuario: User;
   nombre: string;
   cambiarNombre: (valor: string) => void;
+  apellido?: string;
+  cambiarApellido?: (valor: string) => void;
+  tratamiento?: string;
+  cambiarTratamiento?: (valor: string) => void;
+  fechaNacimiento?: string;
+  cambiarFechaNacimiento?: (valor: string) => void;
+  mostrarDatosComensal?: boolean;
   telefono: string;
   cambiarTelefono: (valor: string) => void;
   foto: string;
@@ -59,15 +106,55 @@ function FormularioPerfil({
         <p>JPG o PNG · máximo 5 MB</p>
       </aside>
       <form className="formulario perfil-formulario" onSubmit={guardar}>
-        <div className="separador-formulario"><span>DATOS PERSONALES</span></div>
+        <div className="separador-formulario"><span>{mostrarDatosComensal ? "INFORMACIÓN PERSONAL" : "DATOS PERSONALES"}</span></div>
+        {mostrarDatosComensal && (
+          <>
+            <p className="ayuda-perfil">Tus datos de contacto se compartirán con el restaurante cuando hagas una reserva.</p>
+            <fieldset className="opciones-tratamiento">
+              <legend>Tratamiento</legend>
+              {[
+                ["masculino", "Masculino"],
+                ["femenino", "Femenino"],
+                ["ninguno", "Prefiero no decirlo"],
+              ].map(([valor, etiqueta]) => (
+                <label key={valor}>
+                  <input
+                    type="radio"
+                    name="tratamiento"
+                    value={valor}
+                    checked={tratamiento === valor}
+                    onChange={() => cambiarTratamiento?.(valor)}
+                  />
+                  {etiqueta}
+                </label>
+              ))}
+            </fieldset>
+          </>
+        )}
         <label>
           Nombre
           <input value={nombre} onChange={(evento) => cambiarNombre(evento.target.value)} placeholder="Tu nombre" required />
         </label>
+        {mostrarDatosComensal && (
+          <label>
+            Apellido
+            <input value={apellido} onChange={(evento) => cambiarApellido?.(evento.target.value)} placeholder="Tu apellido" required />
+          </label>
+        )}
         <label>
           Correo electrónico
           <input value={usuario.email ?? ""} type="email" disabled />
         </label>
+        {mostrarDatosComensal && (
+          <label>
+            Fecha de nacimiento
+            <input
+              value={fechaNacimiento}
+              onChange={(evento) => cambiarFechaNacimiento?.(evento.target.value)}
+              type="date"
+            />
+          </label>
+        )}
         <label>
           Número de celular
           <input value={telefono} onChange={(evento) => cambiarTelefono(evento.target.value)} type="tel" placeholder="+57 300 000 0000" />
@@ -80,37 +167,965 @@ function FormularioPerfil({
   );
 }
 
-function PanelRestaurante({ reservas }: { reservas: ReservaPerfil[] }) {
-  const reservasDemo: ReservaPerfil[] = [
-    { restaurante: "Tu restaurante", fecha: "2026-09-24", hora: "19:30", personas: 4, correo: "ana@correo.com", estado: "Confirmada" },
-    { restaurante: "Tu restaurante", fecha: "2026-09-25", hora: "20:00", personas: 2, correo: "luis@correo.com", estado: "Confirmada" },
-    { restaurante: "Tu restaurante", fecha: "2026-09-27", hora: "13:00", personas: 3, correo: "sofia@correo.com", estado: "Pendiente" },
-    { restaurante: "Tu restaurante", fecha: "2026-09-27", hora: "20:30", personas: 5, correo: "carlos@correo.com", estado: "Confirmada" },
+function FotoPerfilRestaurante({
+  foto,
+  cambiarFoto,
+  guardar,
+  cargando,
+}: {
+  foto: string;
+  cambiarFoto: (archivo: File | undefined) => void;
+  guardar: (evento: React.FormEvent<HTMLFormElement>) => void;
+  cargando: boolean;
+}) {
+  return (
+    <form className="identidad-restaurante" onSubmit={guardar}>
+      <div className="avatar-grande">
+        {foto ? <img src={foto} alt="Foto del perfil del restaurante" /> : "R"}
+      </div>
+      <div>
+        <p className="sobretitulo oscuro">IMAGEN DEL RESTAURANTE</p>
+        <label className="boton boton-vino boton-foto">
+          Cambiar foto
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(evento) => cambiarFoto(evento.target.files?.[0])}
+          />
+        </label>
+        <p>JPG o PNG · máximo 5 MB</p>
+      </div>
+      <button className="boton boton-vino" disabled={cargando}>
+        {cargando ? "Guardando..." : "Guardar foto"}
+      </button>
+    </form>
+  );
+}
+
+function ReservasUsuario({
+  reservas,
+  cargando,
+}: {
+  reservas: ReservaPerfil[];
+  cargando: boolean;
+}) {
+  return (
+    <section className="reservas-usuario">
+      <div className="titulo-estadistica">
+        <span>Mis reservas</span>
+        <small>Consulta los detalles de tus próximas visitas</small>
+      </div>
+      {cargando ? (
+        <p className="aviso">Cargando tus reservas...</p>
+      ) : reservas.length === 0 ? (
+        <p className="aviso">Aún no tienes reservas registradas.</p>
+      ) : (
+        <div className="lista-reservas">
+          {reservas.map((reserva, indice) => (
+            <article
+              className="reserva-usuario"
+              key={reserva.id ?? `${reserva.fecha}-${reserva.hora}-${indice}`}
+            >
+              <div>
+                <span>Restaurante</span>
+                <strong>{reserva.restaurante}</strong>
+              </div>
+              <div>
+                <span>Día</span>
+                <strong>
+                  {new Date(`${reserva.fecha}T12:00:00`).toLocaleDateString(
+                    "es-CO",
+                    { weekday: "long" },
+                  )}
+                </strong>
+              </div>
+              <div>
+                <span>Fecha y hora</span>
+                <strong>
+                  {new Date(`${reserva.fecha}T12:00:00`).toLocaleDateString(
+                    "es-CO",
+                    { day: "numeric", month: "long", year: "numeric" },
+                  )}{" "}
+                  · {reserva.hora}
+                </strong>
+              </div>
+              <div>
+                <span>Comensales</span>
+                <strong>
+                  {reserva.personas}{" "}
+                  {reserva.personas === 1 ? "persona" : "personas"}
+                </strong>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DetalleRestaurante({
+  restaurante,
+  favorito,
+  alternarFavorito,
+  reservar,
+  usuario,
+  iniciarSesion,
+  volver,
+}: {
+  restaurante: Restaurante;
+  favorito: boolean;
+  alternarFavorito: () => void;
+  reservar: (seleccion: FormularioReserva) => void;
+  usuario: User | null;
+  iniciarSesion: () => void;
+  volver: () => void;
+}) {
+  const [pestaña, setPestaña] = useState<"acerca" | "menu" | "resenas">(
+    "acerca",
+  );
+  const [seleccionReserva, setSeleccionReserva] =
+    useState<FormularioReserva>(reservaInicial);
+  const [resenas, setResenas] = useState<ResenaRestaurante[]>([]);
+  const [calificacion, setCalificacion] = useState(0);
+  const [comentario, setComentario] = useState("");
+  const [resenasCargando, setResenasCargando] = useState(true);
+  const [resenaEnviando, setResenaEnviando] = useState(false);
+  const [mensajeResena, setMensajeResena] = useState("");
+
+  useEffect(() => {
+    let vigente = true;
+    const cargarResenas = async () => {
+      setResenasCargando(true);
+      setMensajeResena("");
+      try {
+        if (baseDatos) {
+          const resultado = await getDocs(
+            query(
+              collection(baseDatos, "resenas"),
+              where("restauranteId", "==", restaurante.id),
+            ),
+          );
+          const cargadas = resultado.docs.flatMap((documento) => {
+            const datos = documento.data();
+            const resena = normalizarResena(documento.id, datos);
+            return resena ? [resena] : [];
+          });
+          if (vigente) setResenas(cargadas);
+        } else if (vigente) {
+          setResenas(leerResenasLocales(restaurante.id));
+        }
+      } catch {
+        if (vigente) {
+          setMensajeResena(
+            "No pudimos cargar las reseñas. Revisa tu conexión e inténtalo de nuevo.",
+          );
+        }
+      } finally {
+        if (vigente) setResenasCargando(false);
+      }
+    };
+    void cargarResenas();
+    return () => {
+      vigente = false;
+    };
+  }, [restaurante.id]);
+
+  const enviarResena = async (evento: React.FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    if (!usuario) {
+      iniciarSesion();
+      return;
+    }
+    if (calificacion < 1 || calificacion > 5) {
+      setMensajeResena("Selecciona una calificación de 1 a 5 estrellas.");
+      return;
+    }
+    const texto = comentario.trim();
+    if (!texto) {
+      setMensajeResena("Escribe un comentario antes de publicar tu reseña.");
+      return;
+    }
+
+    const nuevaResena: ResenaRestaurante = {
+      id: `${restaurante.id}-${usuario.uid}-${Date.now()}`,
+      restauranteId: restaurante.id,
+      usuarioId: usuario.uid,
+      autor:
+        usuario.displayName?.trim() ||
+        usuario.email?.split("@")[0] ||
+        "Comensal",
+      calificacion,
+      comentario: texto,
+      creadoEn: new Date().toISOString(),
+    };
+    setResenaEnviando(true);
+    setMensajeResena("");
+    try {
+      if (baseDatos) {
+        const guardada = await addDoc(collection(baseDatos, "resenas"), {
+          restauranteId: restaurante.id,
+          restaurante: restaurante.nombre,
+          usuarioId: usuario.uid,
+          autor: nuevaResena.autor,
+          calificacion,
+          comentario: texto,
+          creadoEn: serverTimestamp(),
+        });
+        nuevaResena.id = guardada.id;
+      } else {
+        const existentes = leerResenasLocales(restaurante.id);
+        localStorage.setItem(
+          `silla-libre-resenas-${restaurante.id}`,
+          JSON.stringify([nuevaResena, ...existentes]),
+        );
+      }
+      setResenas((existentes) => [nuevaResena, ...existentes]);
+      setCalificacion(0);
+      setComentario("");
+      setMensajeResena(
+        baseDatos
+          ? "Tu reseña se publicó correctamente."
+          : "Tu reseña se guardó en este dispositivo.",
+      );
+    } catch {
+      setMensajeResena(
+        "No pudimos publicar tu reseña. Revisa tu conexión e inténtalo de nuevo.",
+      );
+    } finally {
+      setResenaEnviando(false);
+    }
+  };
+
+  const promedioResenas = resenas.length
+    ? resenas.reduce((total, resena) => total + resena.calificacion, 0) /
+      resenas.length
+    : restaurante.rating;
+  return (
+    <section className="detalle-restaurante">
+      <div className="detalle-migas">
+        <button type="button" onClick={volver} aria-label="Volver a restaurantes">
+          Inicio
+        </button>
+        <span>›</span>
+        <span>Restaurantes en Bogotá</span>
+        <span>›</span>
+        <strong>{restaurante.nombre}</strong>
+      </div>
+      <div className="detalle-columnas">
+        <div className="detalle-contenido">
+          <div className="detalle-titulo">
+            <div>
+              <h1>{restaurante.nombre}</h1>
+              <p>⌖ {restaurante.locacion}, Bogotá</p>
+              <p>{restaurante.categoria} <span>·</span> Precio {restaurante.rangoprecios}</p>
+              <p className="detalle-calificacion">
+                ★ {promedioResenas.toFixed(1)} <span>·</span>{" "}
+                {resenas.length
+                  ? `${resenas.length} ${resenas.length === 1 ? "reseña" : "reseñas"}`
+                  : "Calificación de Silla Libre"}
+              </p>
+            </div>
+            <button
+              className={`favorito detalle-favorito ${favorito ? "activo" : ""}`}
+              type="button"
+              onClick={alternarFavorito}
+              aria-label={favorito ? "Quitar de favoritos" : "Guardar en favoritos"}
+              aria-pressed={favorito}
+            >
+              {favorito ? "♥" : "♡"}
+            </button>
+          </div>
+          <div className="detalle-galeria">
+            <img src={restaurante.imagen} alt={`Interior de ${restaurante.nombre}`} />
+            <div className="detalle-galeria-info">
+              <span>{restaurante.categoria}</span>
+              <strong>Una experiencia para disfrutar</strong>
+              <small>{restaurante.locacion}, Bogotá</small>
+            </div>
+          </div>
+          <div className="detalle-pestanas" role="tablist" aria-label="Información del restaurante">
+            {([
+              ["acerca", "Acerca de"],
+              ["menu", "Menú"],
+              ["resenas", "Reseñas"],
+            ] as const).map(([id, etiqueta]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={pestaña === id}
+                className={pestaña === id ? "activa" : ""}
+                onClick={() => setPestaña(id)}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+          <div className="detalle-pestana-contenido" role="tabpanel">
+            {pestaña === "acerca" && (
+              <>
+                <h2>Acerca de {restaurante.nombre}</h2>
+                <p>{restaurante.descripcion}</p>
+                <dl className="detalle-datos">
+                  <div><dt>Tipo de cocina</dt><dd>{restaurante.categoria}</dd></div>
+                  <div><dt>Ubicación</dt><dd>{restaurante.locacion}, Bogotá</dd></div>
+                  <div><dt>Precio</dt><dd>{restaurante.rangoprecios}</dd></div>
+                </dl>
+                <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
+                  Visitar sitio oficial ↗
+                </a>
+              </>
+            )}
+            {pestaña === "menu" && (
+              <>
+                <h2>Menú</h2>
+                <p>Consulta la carta y descubre los sabores de {restaurante.nombre}.</p>
+                <p className="aviso">El menú de este restaurante estará disponible próximamente.</p>
+              </>
+            )}
+            {pestaña === "resenas" && (
+              <>
+                <h2>Reseñas</h2>
+                <p className="detalle-resumen-resenas">
+                  <strong>★ {promedioResenas.toFixed(1)}</strong>
+                  <span>
+                    {resenas.length
+                      ? `${resenas.length} ${resenas.length === 1 ? "reseña" : "reseñas"}`
+                      : "Calificación general"}
+                  </span>
+                </p>
+                <form className="formulario-resena" onSubmit={enviarResena}>
+                  <h3>Comparte tu experiencia</h3>
+                  {usuario ? (
+                    <p className="resena-identidad">
+                      Publicando como{" "}
+                      <strong>
+                        {usuario.displayName || usuario.email || "Comensal"}
+                      </strong>
+                    </p>
+                  ) : (
+                    <div className="resena-invitacion">
+                      <p>Inicia sesión para calificar y publicar una reseña.</p>
+                      <button
+                        className="boton boton-vino"
+                        type="button"
+                        onClick={iniciarSesion}
+                      >
+                        Iniciar sesión
+                      </button>
+                    </div>
+                  )}
+                  <fieldset disabled={!usuario || resenaEnviando}>
+                    <legend>Tu calificación</legend>
+                    <div className="selector-estrellas" role="radiogroup" aria-label="Calificación de 1 a 5 estrellas">
+                      {[1, 2, 3, 4, 5].map((valor) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          role="radio"
+                          aria-checked={calificacion === valor}
+                          aria-label={`${valor} ${valor === 1 ? "estrella" : "estrellas"}`}
+                          className={valor <= calificacion ? "seleccionada" : ""}
+                          onClick={() => setCalificacion(valor)}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                    <label>
+                      Tu reseña
+                      <textarea
+                        value={comentario}
+                        onChange={(evento) => setComentario(evento.target.value)}
+                        maxLength={1000}
+                        rows={4}
+                        placeholder="Cuéntales a otros comensales cómo fue tu visita..."
+                        required
+                      />
+                    </label>
+                    <button
+                      className="boton boton-vino"
+                      type="submit"
+                      disabled={resenaEnviando || !usuario}
+                    >
+                      {resenaEnviando ? "Publicando..." : "Publicar reseña"}
+                    </button>
+                  </fieldset>
+                  {mensajeResena && (
+                    <p className="mensaje-resena" role="status">
+                      {mensajeResena}
+                    </p>
+                  )}
+                </form>
+                <div className="lista-resenas" aria-live="polite">
+                  {resenasCargando ? (
+                    <p>Cargando reseñas...</p>
+                  ) : resenas.length ? (
+                    resenas.map((resena) => (
+                      <article className="resena-publicada" key={resena.id}>
+                        <div className="resena-encabezado">
+                          <strong>{resena.autor}</strong>
+                          <span aria-label={`${resena.calificacion} de 5 estrellas`}>
+                            {"★".repeat(resena.calificacion)}
+                            <span className="estrellas-vacias">
+                              {"★".repeat(5 - resena.calificacion)}
+                            </span>
+                          </span>
+                        </div>
+                        <p>{resena.comentario}</p>
+                        <small>
+                          {new Date(resena.creadoEn).toLocaleDateString("es-CO")}
+                        </small>
+                      </article>
+                    ))
+                  ) : (
+                    <p>Aún no hay reseñas. ¡Sé la primera persona en compartir su experiencia!</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <aside className="detalle-reserva">
+          <h2>Reserva una mesa</h2>
+          <p>Encuentra el momento ideal para visitar {restaurante.nombre}.</p>
+          <form
+            className="detalle-reserva-formulario"
+            onSubmit={(evento) => {
+              evento.preventDefault();
+              reservar(seleccionReserva);
+            }}
+          >
+            <label>
+              Fecha
+              <input
+                type="date"
+                value={seleccionReserva.fecha}
+                onChange={(evento) =>
+                  setSeleccionReserva({
+                    ...seleccionReserva,
+                    fecha: evento.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+            <label>
+              Hora
+              <input
+                type="time"
+                value={seleccionReserva.hora}
+                min={
+                  restaurante.id === 1
+                    ? "12:30"
+                    : restaurante.id === 2
+                      ? "12:00"
+                      : undefined
+                }
+                max={
+                  restaurante.id === 1 || restaurante.id === 2
+                    ? "23:00"
+                    : undefined
+                }
+                onChange={(evento) =>
+                  setSeleccionReserva({
+                    ...seleccionReserva,
+                    hora: evento.target.value,
+                  })
+                }
+                required
+              />
+            </label>
+            <label>
+              Número de personas
+              <select
+                value={seleccionReserva.personas}
+                onChange={(evento) =>
+                  setSeleccionReserva({
+                    ...seleccionReserva,
+                    personas: evento.target.value,
+                  })
+                }
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((numero) => (
+                  <option key={numero} value={numero}>
+                    {numero} {numero === 1 ? "persona" : "personas"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="boton boton-vino" type="submit">
+              Elegir fecha y hora <span>↗</span>
+            </button>
+          </form>
+          <small>La reserva se confirma en el siguiente paso.</small>
+          <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
+            Más información en el sitio oficial
+          </a>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+interface ResenaRestaurante {
+  id: string;
+  restauranteId: number;
+  usuarioId: string;
+  autor: string;
+  calificacion: number;
+  comentario: string;
+  creadoEn: string;
+}
+
+function normalizarResena(
+  id: string,
+  datos: Record<string, unknown>,
+): ResenaRestaurante | null {
+  if (
+    typeof datos.restauranteId !== "number" ||
+    typeof datos.usuarioId !== "string" ||
+    typeof datos.calificacion !== "number" ||
+    datos.calificacion < 1 ||
+    datos.calificacion > 5 ||
+    typeof datos.comentario !== "string"
+  ) {
+    return null;
+  }
+  const fecha =
+    datos.creadoEn &&
+    typeof datos.creadoEn === "object" &&
+    "toDate" in datos.creadoEn &&
+    typeof datos.creadoEn.toDate === "function"
+      ? datos.creadoEn.toDate().toISOString()
+      : typeof datos.creadoEn === "string"
+        ? datos.creadoEn
+        : new Date().toISOString();
+  return {
+    id,
+    restauranteId: datos.restauranteId,
+    usuarioId: datos.usuarioId,
+    autor: typeof datos.autor === "string" ? datos.autor : "Comensal",
+    calificacion: datos.calificacion,
+    comentario: datos.comentario,
+    creadoEn: fecha,
+  };
+}
+
+function leerResenasLocales(restauranteId: number): ResenaRestaurante[] {
+  try {
+    const guardado = localStorage.getItem(
+      `silla-libre-resenas-${restauranteId}`,
+    );
+    if (!guardado) return [];
+    const datos: unknown = JSON.parse(guardado);
+    if (!Array.isArray(datos)) return [];
+    return datos.flatMap((elemento) => {
+      if (!elemento || typeof elemento !== "object") return [];
+      const dato = elemento as Record<string, unknown>;
+      if (
+        typeof dato.id !== "string" ||
+        typeof dato.usuarioId !== "string" ||
+        typeof dato.autor !== "string" ||
+        typeof dato.calificacion !== "number" ||
+        typeof dato.comentario !== "string" ||
+        typeof dato.creadoEn !== "string"
+      ) {
+        return [];
+      }
+      const resena = normalizarResena(dato.id, {
+        ...dato,
+        restauranteId,
+      });
+      return resena ? [resena] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function PanelRestaurante({
+  foto,
+  cambiarFoto,
+  guardarPerfil,
+  restaurantes,
+  reservas,
+  datosFormulario,
+  cambiarFormulario,
+  registrarRestaurante,
+  cambiarPlato,
+  agregarPlato,
+  quitarPlato,
+  guardarMenu,
+  subirMenuArchivo,
+  progresoMenu,
+  cancelarReserva,
+  cargando,
+}: {
+  foto: string;
+  cambiarFoto: (archivo: File | undefined) => void;
+  guardarPerfil: (evento: React.FormEvent<HTMLFormElement>) => void;
+  restaurantes: RestaurantePropietario[];
+  reservas: ReservaPerfil[];
+  datosFormulario: FormularioRestaurante;
+  cambiarFormulario: (datos: FormularioRestaurante) => void;
+  registrarRestaurante: (evento: React.FormEvent<HTMLFormElement>) => void;
+  cambiarPlato: (
+    restauranteId: string,
+    platoId: string,
+    cambios: Partial<PlatoMenu>,
+  ) => void;
+  agregarPlato: (restauranteId: string) => void;
+  quitarPlato: (restauranteId: string, platoId: string) => void;
+  guardarMenu: (restauranteId: string) => void;
+  subirMenuArchivo: (restauranteId: string, archivo: File) => void;
+  progresoMenu: Record<string, number>;
+  cancelarReserva: (reserva: ReservaPerfil) => void;
+  cargando: boolean;
+}) {
+  const reservasActivas = reservas.filter(
+    (reserva) => reserva.estado !== "Cancelada",
+  );
+  const reservasPorHora = reservasActivas.reduce<Record<string, number>>(
+    (total, reserva) => {
+      const hora = reserva.hora.slice(0, 2);
+      total[hora] = (total[hora] ?? 0) + 1;
+      return total;
+    },
+    {},
+  );
+  const diasSemana = [
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+    "Domingo",
   ];
-  const datos = reservas.length ? reservas : reservasDemo;
-  const porDia = datos.reduce<Record<string, number>>((total, reserva) => {
-    total[reserva.fecha] = (total[reserva.fecha] ?? 0) + 1;
-    return total;
-  }, {});
-  const porHora = datos.reduce<Record<string, number>>((total, reserva) => {
-    const hora = reserva.hora.slice(0, 2);
-    total[hora] = (total[hora] ?? 0) + 1;
-    return total;
-  }, {});
-  const mayorDia = Math.max(...Object.values(porDia), 1);
-  const mayorHora = Math.max(...Object.values(porHora), 1);
+  const reservasPorDia = reservasActivas.reduce<number[]>(
+    (total, reserva) => {
+      const dia = new Date(`${reserva.fecha}T12:00:00`).getDay();
+      total[(dia + 6) % 7] += 1;
+      return total;
+    },
+    Array.from({ length: 7 }, () => 0),
+  );
+  const horaPico = Object.entries(reservasPorHora).sort(
+    (a, b) => b[1] - a[1],
+  )[0];
+  const diaPico = Math.max(...reservasPorDia);
+  const maxReservasPorHora = Math.max(...Object.values(reservasPorHora), 1);
+  const maxReservasPorDia = Math.max(...reservasPorDia, 1);
   return (
     <div className="panel-restaurante">
+      <FotoPerfilRestaurante
+        foto={foto}
+        cambiarFoto={cambiarFoto}
+        guardar={guardarPerfil}
+        cargando={cargando}
+      />
+      <div className="encabezado-panel-restaurante">
+        <div>
+          <p className="sobretitulo oscuro">PANEL DEL RESTAURANTE</p>
+          <h3>Administra tus restaurantes y reservas.</h3>
+          <p>Sube tu menú, consulta la demanda y gestiona las cancelaciones.</p>
+        </div>
+      </div>
       <div className="resumen-reservas">
-        <div><span>RESERVAS TOTALES</span><strong>{datos.length}</strong><small>Últimos movimientos</small></div>
-        <div><span>PERSONAS ATENDIDAS</span><strong>{datos.reduce((total, reserva) => total + reserva.personas, 0)}</strong><small>En reservas registradas</small></div>
-        <div><span>HORA MÁS SOLICITADA</span><strong>{Object.entries(porHora).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "--"}:00</strong><small>Franja con más demanda</small></div>
+        <div>
+          <span>RESERVAS ACTIVAS</span>
+          <strong>{reservasActivas.length}</strong>
+          <small>En tus restaurantes</small>
+        </div>
+        <div>
+          <span>HORA CON MÁS RESERVAS</span>
+          <strong>{horaPico ? `${horaPico[0]}:00` : "--"}</strong>
+          <small>
+            {horaPico
+              ? `${horaPico[1]} ${horaPico[1] === 1 ? "reserva" : "reservas"}`
+              : "Sin reservas activas"}
+          </small>
+        </div>
+        <div>
+          <span>DÍA CON MÁS RESERVAS</span>
+          <strong>
+            {reservasActivas.length > 0
+              ? diasSemana[reservasPorDia.indexOf(diaPico)]
+              : "--"}
+          </strong>
+          <small>
+            {reservasActivas.length > 0
+              ? `${diaPico} ${diaPico === 1 ? "reserva" : "reservas"}`
+              : "Sin reservas activas"}
+          </small>
+        </div>
       </div>
-      <div className="estadisticas-grid">
-        <div className="estadistica"><div className="titulo-estadistica"><span>Reservas por día</span><small>Actividad reciente</small></div>{Object.entries(porDia).map(([dia, cantidad]) => <div className="barra-estadistica" key={dia}><span>{new Date(`${dia}T12:00:00`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric" })}</span><div><i style={{ width: `${(cantidad / mayorDia) * 100}%` }} /></div><strong>{cantidad}</strong></div>)}</div>
-        <div className="estadistica"><div className="titulo-estadistica"><span>Horas más reservadas</span><small>Distribución del servicio</small></div>{Object.entries(porHora).sort().map(([hora, cantidad]) => <div className="barra-estadistica" key={hora}><span>{hora}:00</span><div><i className="barra-dorada" style={{ width: `${(cantidad / mayorHora) * 100}%` }} /></div><strong>{cantidad}</strong></div>)}</div>
-      </div>
-      <div className="tabla-reservas"><div className="titulo-estadistica"><span>Reservas recientes</span><small>Gestiona la llegada de tus clientes</small></div><div className="lista-reservas">{datos.map((reserva, indice) => <div className="fila-reserva" key={`${reserva.fecha}-${reserva.hora}-${indice}`}><strong>{reserva.fecha}</strong><span>{reserva.hora} · {reserva.personas} {reserva.personas === 1 ? "persona" : "personas"}</span><small>{reserva.correo}</small><em className={reserva.estado === "Pendiente" ? "pendiente" : "confirmada"}>{reserva.estado}</em></div>)}</div></div>
+      {restaurantes.length === 0 && (
+        <section className="restaurante-admin">
+          <div className="titulo-estadistica">
+            <span>Registra tu restaurante para empezar</span>
+            <small>Después podrás subir el menú en PDF o Word y gestionar sus reservas.</small>
+          </div>
+          <FormularioRestaurante
+            datos={datosFormulario}
+            cambiar={cambiarFormulario}
+            enviar={registrarRestaurante}
+            cargando={cargando}
+          />
+        </section>
+      )}
+      {restaurantes.map((restaurante) => (
+        <section className="restaurante-admin" key={restaurante.id}>
+          <div className="titulo-restaurante-admin">
+            <div>
+              <span className="sobretitulo oscuro">TU RESTAURANTE</span>
+              <h3>{restaurante.nombre}</h3>
+              <p>{restaurante.comida} · {restaurante.direccion}</p>
+            </div>
+            <span className="contador">
+              {restaurante.menuPdfUrl ? "Menú cargado" : `${restaurante.menu.length} platos`}
+            </span>
+          </div>
+          <div className="menu-admin">
+            <div className="titulo-estadistica">
+              <span>Subir menú</span>
+              <small>Acepta archivos PDF o Word (.doc, .docx)</small>
+            </div>
+            {restaurante.menuPdfUrl && (
+              <p className="menu-archivo-actual">
+                <a href={restaurante.menuPdfUrl} target="_blank" rel="noreferrer">
+                  Ver {restaurante.menuPdfNombre || "menú actual"} ↗
+                </a>
+              </p>
+            )}
+            <label className="selector-menu-archivo">
+              <input
+                type="file"
+                accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+                disabled={cargando}
+                onChange={(evento) => {
+                  const archivo = evento.target.files?.[0];
+                  if (archivo) {
+                    subirMenuArchivo(restaurante.id, archivo);
+                  }
+                  evento.currentTarget.value = "";
+                }}
+              />
+              <span className="boton boton-vino">
+                {cargando && progresoMenu[restaurante.id] >= 0
+                  ? "Subiendo..."
+                  : restaurante.menuPdfUrl
+                    ? "Cambiar archivo"
+                    : "Seleccionar archivo"}
+              </span>
+              <span className="selector-menu-detalle">
+                PDF o Word · máximo 10 MB
+              </span>
+            </label>
+            {progresoMenu[restaurante.id] !== undefined && (
+              <div className="progreso-menu" role="status" aria-live="polite">
+                {progresoMenu[restaurante.id] < 0 ? (
+                  <span>No se pudo guardar el archivo. Intenta subirlo de nuevo.</span>
+                ) : progresoMenu[restaurante.id] < 100 ? (
+                  <>
+                    <progress
+                      max="100"
+                      value={progresoMenu[restaurante.id]}
+                    />
+                    <span>Subiendo {progresoMenu[restaurante.id]}%</span>
+                  </>
+                ) : (
+                  <span>Menú guardado correctamente.</span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="menu-admin">
+            <div className="titulo-estadistica">
+              <span>Menú</span>
+              <small>Los cambios se guardan para este restaurante</small>
+            </div>
+            {restaurante.menu.length === 0 && (
+              <p className="aviso">Todavía no agregas platos a este menú.</p>
+            )}
+            {restaurante.menu.map((plato) => (
+              <div className="plato-editor" key={plato.id}>
+                <label>
+                  Plato
+                  <input
+                    value={plato.nombre}
+                    onChange={(evento) =>
+                      cambiarPlato(restaurante.id, plato.id, {
+                        nombre: evento.target.value,
+                      })
+                    }
+                    placeholder="Nombre del plato"
+                  />
+                </label>
+                <label>
+                  Descripción
+                  <input
+                    value={plato.descripcion}
+                    onChange={(evento) =>
+                      cambiarPlato(restaurante.id, plato.id, {
+                        descripcion: evento.target.value,
+                      })
+                    }
+                    placeholder="Ingredientes o detalles"
+                  />
+                </label>
+                <label>
+                  Precio
+                  <input
+                    type="number"
+                    min="0"
+                    value={plato.precio}
+                    onChange={(evento) =>
+                      cambiarPlato(restaurante.id, plato.id, {
+                        precio: evento.target.value,
+                      })
+                    }
+                    placeholder="45000"
+                  />
+                </label>
+                <button
+                  className="boton-texto boton-quitar-plato"
+                  type="button"
+                  onClick={() => quitarPlato(restaurante.id, plato.id)}
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+            <div className="acciones-menu">
+              <button
+                className="boton-texto"
+                type="button"
+                onClick={() => agregarPlato(restaurante.id)}
+              >
+                + Agregar plato
+              </button>
+              <button
+                className="boton boton-vino"
+                type="button"
+                disabled={cargando}
+                onClick={() => guardarMenu(restaurante.id)}
+              >
+                {cargando ? "Guardando..." : "Guardar menú"}
+              </button>
+            </div>
+          </div>
+        </section>
+      ))}
+      <section className="restaurante-admin">
+        <div className="estadisticas-grid">
+          <div className="estadistica">
+            <div className="titulo-estadistica">
+              <span>Reservas por hora</span>
+              <small>Reservas activas</small>
+            </div>
+            {Object.keys(reservasPorHora).length === 0 ? (
+              <p className="aviso">Aún no hay reservas activas para mostrar.</p>
+            ) : (
+              Object.entries(reservasPorHora)
+                .sort(([horaA], [horaB]) => Number(horaA) - Number(horaB))
+                .map(([hora, cantidad]) => (
+                  <div className="barra-estadistica" key={hora}>
+                    <span>{hora}:00</span>
+                    <div>
+                      <i
+                        style={{
+                          width: `${(cantidad / maxReservasPorHora) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <strong>{cantidad}</strong>
+                  </div>
+                ))
+            )}
+          </div>
+          <div className="estadistica">
+            <div className="titulo-estadistica">
+              <span>Reservas por día</span>
+              <small>Reservas activas</small>
+            </div>
+            {diasSemana.map((dia, indice) => (
+              <div className="barra-estadistica" key={dia}>
+                <span>{dia}</span>
+                <div>
+                  <i
+                    className="barra-dorada"
+                    style={{
+                      width: `${(reservasPorDia[indice] / maxReservasPorDia) * 100}%`,
+                    }}
+                  />
+                </div>
+                <strong>{reservasPorDia[indice]}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      {restaurantes.length > 0 && (
+        <section className="restaurante-admin">
+          <div className="titulo-estadistica">
+            <span>Registrar otro restaurante</span>
+            <small>Los restaurantes quedan asociados a esta cuenta</small>
+          </div>
+          <FormularioRestaurante
+            datos={datosFormulario}
+            cambiar={cambiarFormulario}
+            enviar={registrarRestaurante}
+            cargando={cargando}
+          />
+        </section>
+      )}
+      <section className="restaurante-admin">
+        <div className="titulo-estadistica">
+          <span>Reservas recibidas</span>
+          <small>Las cancelaciones se reflejan en el perfil del comensal</small>
+        </div>
+        {reservas.length === 0 ? (
+          <p className="aviso">Todavía no hay reservas para tus restaurantes.</p>
+        ) : (
+          <div className="lista-reservas">
+            {reservas.map((reserva, indice) => (
+              <article
+                className="fila-reserva"
+                key={reserva.id ?? `${reserva.fecha}-${reserva.hora}-${indice}`}
+              >
+                <strong>{reserva.restaurante}</strong>
+                <span>
+                  {new Date(`${reserva.fecha}T12:00:00`).toLocaleDateString(
+                    "es-CO",
+                    { weekday: "short", day: "numeric", month: "short" },
+                  )}{" "}
+                  · {reserva.hora}
+                </span>
+                <small>
+                  {reserva.personas}{" "}
+                  {reserva.personas === 1 ? "comensal" : "comensales"} ·{" "}
+                  {reserva.correo}
+                </small>
+                {reserva.estado === "Cancelada" ? (
+                  <em className="pendiente">Cancelada</em>
+                ) : (
+                  <button
+                    className="boton-texto boton-cancelar-reserva"
+                    type="button"
+                    disabled={cargando || !reserva.id}
+                    onClick={() => cancelarReserva(reserva)}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -128,8 +1143,14 @@ interface FormularioRestaurante {
   certificado: File | null;
 }
 interface ReservaPerfil extends DatosReserva {
+  id?: string;
   estado?: string;
 }
+type VistaPagina =
+  | "inicio"
+  | "detalle-restaurante"
+  | "perfil-usuario"
+  | "perfil-restaurante";
 const reservaInicial: FormularioReserva = {
   fecha: "",
   hora: "",
@@ -141,6 +1162,116 @@ const restauranteInicial: FormularioRestaurante = {
   comida: "",
   certificado: null,
 };
+function subirArchivoConLimite(
+  referencia: StorageReference,
+  archivo: File,
+  informarProgreso?: (porcentaje: number) => void,
+): Promise<UploadTaskSnapshot> {
+  const tarea = uploadBytesResumable(referencia, archivo);
+  return new Promise((resolver, rechazar) => {
+    const tiempoLimite = window.setTimeout(() => {
+      tarea.cancel();
+      rechazar(new Error("La carga superó el tiempo límite de 30 segundos."));
+    }, 30_000);
+    tarea.on(
+      "state_changed",
+      (snapshot) => {
+        informarProgreso?.(
+          Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+        );
+      },
+      (error) => {
+        window.clearTimeout(tiempoLimite);
+        rechazar(error);
+      },
+      () => {
+        window.clearTimeout(tiempoLimite);
+        resolver(tarea.snapshot);
+      },
+    );
+  });
+}
+function esperarConLimite<T>(
+  operacion: Promise<T>,
+  mensaje: string,
+  limiteMs = 20_000,
+): Promise<T> {
+  let temporizador = 0;
+  return Promise.race([
+    operacion,
+    new Promise<T>((_, rechazar) => {
+      temporizador = window.setTimeout(
+        () => rechazar(new Error(mensaje)),
+        limiteMs,
+      );
+    }),
+  ]).finally(() => window.clearTimeout(temporizador));
+}
+async function crearFotoLocal(archivo: File): Promise<string> {
+  const imagen = await createImageBitmap(archivo);
+  const escala = Math.min(1, 1024 / Math.max(imagen.width, imagen.height));
+  const lienzo = document.createElement("canvas");
+  lienzo.width = Math.max(1, Math.round(imagen.width * escala));
+  lienzo.height = Math.max(1, Math.round(imagen.height * escala));
+  const contexto = lienzo.getContext("2d");
+  if (!contexto) throw new Error("No se pudo procesar la foto.");
+  contexto.drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+  imagen.close();
+  return lienzo.toDataURL("image/webp", 0.72);
+}
+async function enviarSolicitudPorCorreo(
+  datos: FormularioRestaurante,
+  propietario: User,
+): Promise<void> {
+  const archivo = datos.certificado;
+  if (!archivo) throw new Error("Adjunta el certificado del restaurante.");
+  const endpoint =
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.DEV ? "http://localhost:3001" : "");
+  if (!endpoint) throw new Error("El servicio de correo no está configurado.");
+
+  const archivoBase64 = await new Promise<string>((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onload = () => {
+      const resultado = lector.result;
+      if (typeof resultado !== "string") {
+        rechazar(new Error("No se pudo leer el certificado."));
+        return;
+      }
+      resolver(resultado.slice(resultado.indexOf(",") + 1));
+    };
+    lector.onerror = () => rechazar(new Error("No se pudo leer el certificado."));
+    lector.readAsDataURL(archivo);
+  });
+  const controlador = new AbortController();
+  const temporizador = window.setTimeout(() => controlador.abort(), 30_000);
+  try {
+    const respuesta = await fetch(`${endpoint}/solicitudes/restaurante`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controlador.signal,
+      body: JSON.stringify({
+        nombre: datos.nombre.trim(),
+        direccion: datos.direccion.trim(),
+        comida: datos.comida.trim(),
+        correoPropietario: propietario.email ?? "",
+        certificado: {
+          nombre: archivo.name,
+          tipo: archivo.type || "application/octet-stream",
+          contenido: archivoBase64,
+        },
+      }),
+    });
+    const resultado = (await respuesta.json()) as { mensaje?: string };
+    if (!respuesta.ok) {
+      throw new Error(
+        resultado.mensaje || "El servidor de correo rechazó la solicitud.",
+      );
+    }
+  } finally {
+    window.clearTimeout(temporizador);
+  }
+}
 function mensajeErrorAcceso(error: unknown): string {
   if (!(error instanceof FirebaseError)) {
     return "No pudimos completar el acceso. Inténtalo de nuevo.";
@@ -169,30 +1300,188 @@ function mensajeErrorAcceso(error: unknown): string {
       return "No pudimos completar el acceso. Revisa los datos e inténtalo de nuevo.";
   }
 }
-function leerPerfilGuardado() {
-  const guardado = localStorage.getItem("silla-libre-perfil");
-  return guardado
-    ? (JSON.parse(guardado) as { tipo?: TipoCuenta; telefono?: string; foto?: string })
-    : {};
+interface PerfilGuardado {
+  tipo?: TipoCuenta;
+  telefono?: string;
+  foto?: string;
+  fotoRestaurante?: string;
+  nombre?: string;
+  apellido?: string;
+  tratamiento?: string;
+  fechaNacimiento?: string;
 }
-function leerReservasGuardadas(): ReservaPerfil[] {
-  const guardado = localStorage.getItem("silla-libre-reservas");
-  return guardado ? JSON.parse(guardado) : [];
+function leerPerfilGuardado(uid?: string): PerfilGuardado {
+  if (!uid) return {};
+  try {
+    const guardado = localStorage.getItem(`silla-libre-perfil-${uid}`);
+    return guardado
+      ? (JSON.parse(guardado) as {
+        tipo?: TipoCuenta;
+        telefono?: string;
+        foto?: string;
+        fotoRestaurante?: string;
+        nombre?: string;
+        apellido?: string;
+        tratamiento?: string;
+        fechaNacimiento?: string;
+      })
+      : {};
+  } catch {
+    return {};
+  }
+}
+function separarNombreCompleto(nombre: string): { nombre: string; apellido: string } {
+  const partes = nombre.trim().split(/\s+/);
+  return {
+    nombre: partes.shift() ?? "",
+    apellido: partes.join(" "),
+  };
+}
+function leerReservasGuardadas(uid: string | null, correo?: string): ReservaPerfil[] {
+  const guardado =
+    (uid ? localStorage.getItem(`silla-libre-reservas-${uid}`) : null) ??
+    localStorage.getItem("silla-libre-reservas");
+  if (!guardado) return [];
+  try {
+    const datos: unknown = JSON.parse(guardado);
+    if (!Array.isArray(datos)) return [];
+    return datos.filter(
+      (reserva): reserva is ReservaPerfil =>
+        Boolean(
+          reserva &&
+            typeof reserva === "object" &&
+            typeof reserva.restaurante === "string" &&
+            typeof reserva.fecha === "string" &&
+            typeof reserva.hora === "string" &&
+            typeof reserva.personas === "number" &&
+            (!correo || reserva.correo === correo),
+        ),
+    );
+  } catch {
+    return [];
+  }
+}
+function normalizarReserva(
+  id: string,
+  datos: Record<string, unknown>,
+): ReservaPerfil | null {
+  if (
+    typeof datos.restaurante !== "string" ||
+    typeof datos.fecha !== "string" ||
+    typeof datos.hora !== "string" ||
+    typeof datos.personas !== "number" ||
+    typeof datos.correo !== "string"
+  ) {
+    return null;
+  }
+  return {
+    id,
+    restaurante: datos.restaurante,
+    fecha: datos.fecha,
+    hora: datos.hora,
+    personas: datos.personas,
+    correo: datos.correo,
+    estado: typeof datos.estado === "string" ? datos.estado : "Confirmada",
+  };
+}
+function leerVistaPagina(): VistaPagina {
+  if (window.location.pathname === "/perfil/restaurante") {
+    return "perfil-restaurante";
+  }
+  if (window.location.pathname === "/perfil/usuario") return "perfil-usuario";
+  if (leerRestauranteDetalleRuta()) return "detalle-restaurante";
+  return "inicio";
+}
+function leerRestauranteDetalleRuta(): Restaurante | null {
+  const coincidencia = window.location.pathname.match(/^\/restaurante\/(\d+)\/?$/);
+  if (!coincidencia) return null;
+  const id = Number(coincidencia[1]);
+  return restaurantes.find((restaurante) => restaurante.id === id) ?? null;
+}
+function normalizarRestaurante(
+  id: string,
+  datos: Record<string, unknown>,
+): RestaurantePropietario {
+  const menu = Array.isArray(datos.menu)
+    ? datos.menu.flatMap((elemento, indice) => {
+        if (!elemento || typeof elemento !== "object") return [];
+        const plato = elemento as Record<string, unknown>;
+        return [{
+          id: typeof plato.id === "string" ? plato.id : `${id}-${indice}`,
+          nombre: typeof plato.nombre === "string" ? plato.nombre : "",
+          descripcion: typeof plato.descripcion === "string" ? plato.descripcion : "",
+          precio: typeof plato.precio === "string" ? plato.precio : "",
+        }];
+      })
+    : [];
+  return {
+    id,
+    nombre: typeof datos.nombre === "string" ? datos.nombre : "",
+    direccion: typeof datos.direccion === "string" ? datos.direccion : "",
+    comida: typeof datos.comida === "string" ? datos.comida : "",
+    certificado: typeof datos.certificado === "string" ? datos.certificado : "",
+    menu,
+    menuPdfUrl: typeof datos.menuPdfUrl === "string" ? datos.menuPdfUrl : "",
+    menuPdfNombre:
+      typeof datos.menuPdfNombre === "string" ? datos.menuPdfNombre : "",
+  };
+}
+function leerRestaurantesLocales(uid: string): RestaurantePropietario[] {
+  const guardado = localStorage.getItem(`silla-libre-restaurantes-${uid}`);
+  if (!guardado) return [];
+  try {
+    const datos: unknown = JSON.parse(guardado);
+    if (!Array.isArray(datos)) return [];
+    return datos.flatMap((restaurante) => {
+      if (!restaurante || typeof restaurante !== "object") return [];
+      const dato = restaurante as Record<string, unknown>;
+      return [normalizarRestaurante(
+        typeof dato.id === "string" ? dato.id : crypto.randomUUID(),
+        dato,
+      )];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function esCuentaRestaurante(uid: string): boolean {
+  return (
+    leerPerfilGuardado(uid).tipo === "restaurante" ||
+    leerRestaurantesLocales(uid).length > 0
+  );
 }
 
 function App() {
   const [pestaña, setPestaña] = useState<Pestaña>("inicio");
+  const [vista, setVista] = useState<VistaPagina>(leerVistaPagina);
+  const [restauranteDetalle, setRestauranteDetalle] =
+    useState<Restaurante | null>(leerRestauranteDetalleRuta);
   const [modal, setModal] = useState<Modal>(null);
   const [tipoCuenta, setTipoCuenta] = useState<TipoCuenta>("usuario");
   const [esRegistro, setEsRegistro] = useState(false);
   const [nombreUsuario, setNombreUsuario] = useState("");
+  const [apellidoUsuario, setApellidoUsuario] = useState("");
+  const [tratamientoUsuario, setTratamientoUsuario] = useState("ninguno");
+  const [fechaNacimiento, setFechaNacimiento] = useState("");
   const [correo, setCorreo] = useState("");
   const [contraseña, setContraseña] = useState("");
   const [usuario, setUsuario] = useState<User | null>(null);
-  const [tipoUsuario, setTipoUsuario] = useState<TipoCuenta>(() => leerPerfilGuardado().tipo ?? "usuario");
-  const [telefono, setTelefono] = useState(() => leerPerfilGuardado().telefono ?? "");
-  const [fotoPerfil, setFotoPerfil] = useState(() => leerPerfilGuardado().foto ?? "");
-  const [reservasPerfil, setReservasPerfil] = useState<ReservaPerfil[]>(leerReservasGuardadas);
+  const [autenticacionCargando, setAutenticacionCargando] = useState(
+    Boolean(autenticacion),
+  );
+  const [tipoUsuario, setTipoUsuario] = useState<TipoCuenta>("usuario");
+  const [telefono, setTelefono] = useState("");
+  const [fotoPerfil, setFotoPerfil] = useState("");
+  const [fotoPerfilPrevia, setFotoPerfilPrevia] = useState("");
+  const [archivoFotoPerfil, setArchivoFotoPerfil] = useState<File | null>(null);
+  const [perfilCargando, setPerfilCargando] = useState(Boolean(autenticacion));
+  const [reservasPerfil, setReservasPerfil] = useState<ReservaPerfil[]>([]);
+  const [reservasCargando, setReservasCargando] = useState(false);
+  const [restaurantesPropietario, setRestaurantesPropietario] = useState<
+    RestaurantePropietario[]
+  >([]);
+  const [progresoMenu, setProgresoMenu] = useState<Record<string, number>>({});
   const [reserva, setReserva] = useState<FormularioReserva>(reservaInicial);
   const [restauranteActivo, setRestauranteActivo] = useState(restaurantes[0]);
   const [busqueda, setBusqueda] = useState("");
@@ -204,13 +1493,236 @@ function App() {
     useState(restauranteInicial);
 
   useEffect(() => {
-    if (!autenticacion) return;
-    return onAuthStateChanged(autenticacion, setUsuario);
+    const sincronizarRuta = () => {
+      setRestauranteDetalle(leerRestauranteDetalleRuta());
+      setVista(leerVistaPagina());
+    };
+    window.addEventListener("popstate", sincronizarRuta);
+    if (!autenticacion) {
+      return () => window.removeEventListener("popstate", sincronizarRuta);
+    }
+    const cancelarAutenticacion = onAuthStateChanged(
+      autenticacion,
+      (usuarioAutenticado) => {
+        setUsuario(usuarioAutenticado);
+        setAutenticacionCargando(false);
+        setPerfilCargando(Boolean(usuarioAutenticado));
+        const perfil = leerPerfilGuardado(usuarioAutenticado?.uid);
+        const tipoLocal: TipoCuenta =
+          window.location.pathname === "/perfil/restaurante" ||
+          perfil.tipo === "restaurante" ||
+          (usuarioAutenticado && esCuentaRestaurante(usuarioAutenticado.uid))
+            ? "restaurante"
+            : "usuario";
+        const nombreGuardado = perfil.nombre ?? "";
+        const partesNombre = separarNombreCompleto(
+          nombreGuardado || usuarioAutenticado?.displayName || "",
+        );
+        setNombreUsuario(nombreGuardado || partesNombre.nombre);
+        setApellidoUsuario(perfil.apellido ?? partesNombre.apellido);
+        setTratamientoUsuario(perfil.tratamiento ?? "ninguno");
+        setFechaNacimiento(perfil.fechaNacimiento ?? "");
+        setTelefono(perfil.telefono ?? "");
+        setFotoPerfil(
+          perfil.fotoRestaurante ??
+            perfil.foto ??
+            usuarioAutenticado?.photoURL ??
+            "",
+        );
+        setFotoPerfilPrevia("");
+        setArchivoFotoPerfil(null);
+        setTipoUsuario(tipoLocal);
+        if (
+          usuarioAutenticado &&
+          (window.location.pathname === "/perfil/restaurante" ||
+            window.location.pathname === "/perfil/usuario")
+        ) {
+          const rutaPerfil =
+            window.location.pathname === "/perfil/restaurante" ||
+            tipoLocal === "restaurante"
+              ? "/perfil/restaurante"
+              : "/perfil/usuario";
+          window.history.replaceState({}, "", rutaPerfil);
+          setVista(
+            rutaPerfil === "/perfil/restaurante"
+              ? "perfil-restaurante"
+              : "perfil-usuario",
+          );
+        }
+        setRestaurantesPropietario([]);
+        setReservasPerfil([]);
+      },
+    );
+    return () => {
+      window.removeEventListener("popstate", sincronizarRuta);
+      cancelarAutenticacion();
+    };
   }, []);
   useEffect(() => {
-    if (pestaña === "perfil")
-      document.getElementById("perfil")?.scrollIntoView({ behavior: "smooth" });
-  }, [pestaña]);
+    if (!usuario) return;
+    let vigente = true;
+    const cargarPerfil = async () => {
+      setReservasCargando(true);
+      if (baseDatos) {
+        const db = baseDatos;
+        const [perfil, negocios, reservasUsuario] = await Promise.all([
+          getDoc(doc(db, "perfiles", usuario.uid)),
+          getDocs(
+            query(
+              collection(db, "restaurantes"),
+              where("propietario", "==", usuario.uid),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, "reservas"),
+              where("usuario", "==", usuario.uid),
+            ),
+          ),
+        ]);
+        if (!vigente) return;
+        const datosPerfil = perfil.exists() ? perfil.data() : undefined;
+        const perfilLocal = leerPerfilGuardado(usuario.uid);
+        const negociosLocales = leerRestaurantesLocales(usuario.uid);
+        const tipoPerfil: TipoCuenta =
+          window.location.pathname === "/perfil/restaurante" ||
+            negocios.size > 0 ||
+            negociosLocales.length > 0 ||
+            perfilLocal.tipo === "restaurante"
+            ? "restaurante"
+            : datosPerfil?.tipo === "restaurante" ||
+                datosPerfil?.tipo === "usuario"
+              ? datosPerfil.tipo
+              : leerPerfilGuardado(usuario.uid).tipo === "restaurante"
+                ? "restaurante"
+                : "usuario";
+        setTipoUsuario(tipoPerfil);
+        if (
+          window.location.pathname === "/perfil/restaurante" ||
+          window.location.pathname === "/perfil/usuario"
+        ) {
+          const rutaPerfil =
+            window.location.pathname === "/perfil/restaurante" ||
+            tipoPerfil === "restaurante"
+              ? "/perfil/restaurante"
+              : "/perfil/usuario";
+          window.history.replaceState({}, "", rutaPerfil);
+          setVista(
+            rutaPerfil === "/perfil/restaurante"
+              ? "perfil-restaurante"
+              : "perfil-usuario",
+          );
+        }
+        const reservasRestaurantes = await Promise.all(
+          negocios.docs.map((negocio) =>
+            getDocs(
+              query(
+                collection(db, "reservas"),
+                where("restaurante", "==", negocio.data().nombre),
+              ),
+            ),
+          ),
+        );
+        if (!vigente) return;
+        if (datosPerfil) {
+          const datos = datosPerfil;
+          if (typeof datos.nombre === "string") {
+            const partes = separarNombreCompleto(datos.nombre);
+            setNombreUsuario(
+              typeof datos.nombrePila === "string"
+                ? datos.nombrePila
+                : partes.nombre,
+            );
+            setApellidoUsuario(
+              typeof datos.apellido === "string"
+                ? datos.apellido
+                : partes.apellido,
+            );
+          }
+          if (typeof datos.telefono === "string") setTelefono(datos.telefono);
+          if (typeof datos.fotoRestaurante === "string") {
+            setFotoPerfil(datos.fotoRestaurante);
+          } else if (typeof datos.foto === "string") {
+            setFotoPerfil(datos.foto);
+          }
+          if (typeof datos.tratamiento === "string") {
+            setTratamientoUsuario(datos.tratamiento);
+          }
+          if (typeof datos.fechaNacimiento === "string") {
+            setFechaNacimiento(datos.fechaNacimiento);
+          }
+        }
+        const restaurantesRemotos = negocios.docs.map((negocio) =>
+          normalizarRestaurante(negocio.id, negocio.data()),
+        );
+        const restaurantesPorId = new Map(
+          negociosLocales.map((restaurante) => [restaurante.id, restaurante]),
+        );
+        restaurantesRemotos.forEach((restaurante) =>
+          restaurantesPorId.set(restaurante.id, restaurante),
+        );
+        setRestaurantesPropietario([...restaurantesPorId.values()]);
+        setReservasPerfil(
+          [
+            ...new Map(
+              [...reservasUsuario.docs, ...reservasRestaurantes.flatMap((grupo) => grupo.docs)]
+                .map((reserva) => [reserva.id, reserva] as const),
+            ).values(),
+          ].flatMap((reserva) => {
+            const datos = normalizarReserva(reserva.id, reserva.data());
+            return datos ? [datos] : [];
+          }),
+        );
+      } else {
+        const restaurantesLocales = leerRestaurantesLocales(usuario.uid);
+        const tipoLocal: TipoCuenta =
+          restaurantesLocales.length > 0 ||
+          leerPerfilGuardado(usuario.uid).tipo === "restaurante"
+            ? "restaurante"
+            : "usuario";
+        setTipoUsuario(tipoLocal);
+        if (
+          window.location.pathname === "/perfil/restaurante" ||
+          window.location.pathname === "/perfil/usuario"
+        ) {
+          const rutaPerfil =
+            window.location.pathname === "/perfil/restaurante" ||
+            tipoLocal === "restaurante"
+              ? "/perfil/restaurante"
+              : "/perfil/usuario";
+          window.history.replaceState({}, "", rutaPerfil);
+          setVista(
+            rutaPerfil === "/perfil/restaurante"
+              ? "perfil-restaurante"
+              : "perfil-usuario",
+          );
+        }
+        setRestaurantesPropietario(restaurantesLocales);
+        const nombresRestaurantes = new Set(
+          restaurantesLocales.map((restaurante) => restaurante.nombre),
+        );
+        setReservasPerfil(
+          leerReservasGuardadas(null).filter((reserva) =>
+            nombresRestaurantes.has(reserva.restaurante),
+          ),
+        );
+      }
+      if (vigente) setReservasCargando(false);
+      if (vigente) setPerfilCargando(false);
+    };
+    void cargarPerfil().catch(() => {
+      if (vigente) {
+        setReservasCargando(false);
+        setPerfilCargando(false);
+        setMensaje(
+          "No pudimos cargar los datos del perfil. Revisa la conexión e inténtalo de nuevo.",
+        );
+      }
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [usuario]);
   const restaurantesFiltrados = useMemo(
     () =>
       restaurantes.filter((restaurante) => {
@@ -229,9 +1741,133 @@ function App() {
     setMensaje("");
     setModal("acceso");
   };
+  const irAInicio = () => {
+    window.history.pushState({}, "", "/");
+    setVista("inicio");
+    setRestauranteDetalle(null);
+    setPestaña("inicio");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const abrirDetalleRestaurante = (restaurante: Restaurante) => {
+    window.history.pushState({}, "", `/restaurante/${restaurante.id}`);
+    setRestauranteDetalle(restaurante);
+    setVista("detalle-restaurante");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const volverAListaRestaurantes = () => {
+    window.history.pushState({}, "", "/");
+    setVista("inicio");
+    setRestauranteDetalle(null);
+    setPestaña("restaurantes");
+    window.requestAnimationFrame(() =>
+      document.getElementById("restaurantes")?.scrollIntoView({ behavior: "smooth" }),
+    );
+  };
+  const irAlPerfil = () => {
+    if (!usuario) {
+      mostrarAcceso();
+      return;
+    }
+    const esRestaurante =
+      tipoUsuario === "restaurante" || esCuentaRestaurante(usuario.uid);
+    const destino =
+      esRestaurante
+        ? "/perfil/restaurante"
+        : "/perfil/usuario";
+    window.history.pushState({}, "", destino);
+    setVista(esRestaurante ? "perfil-restaurante" : "perfil-usuario");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const abrirPerfilRestaurante = async () => {
+    if (!usuario) {
+      mostrarAcceso();
+      return;
+    }
+    setTipoUsuario("restaurante");
+    setVista("perfil-restaurante");
+    window.history.pushState({}, "", "/perfil/restaurante");
+    const perfilActual = leerPerfilGuardado(usuario.uid);
+    try {
+      localStorage.setItem(
+        `silla-libre-perfil-${usuario.uid}`,
+        JSON.stringify({ ...perfilActual, tipo: "restaurante" }),
+      );
+      if (baseDatos) {
+        await setDoc(
+          doc(baseDatos, "perfiles", usuario.uid),
+          { tipo: "restaurante" },
+          { merge: true },
+        );
+      }
+    } catch {
+      setMensaje(
+        "Abrimos el panel de restaurante, pero no pudimos guardar el tipo de cuenta. Revisa la conexión e inténtalo de nuevo.",
+      );
+    }
+  };
   const navegar = (destino: Pestaña) => {
+    if (destino === "perfil") {
+      irAlPerfil();
+      return;
+    }
     setPestaña(destino);
     document.getElementById(destino)?.scrollIntoView({ behavior: "smooth" });
+  };
+  const cerrarSesion = async () => {
+    if (autenticacion) await signOut(autenticacion);
+    irAInicio();
+  };
+  const guardarRestaurantePropietario = async (
+    propietario: User,
+  ): Promise<void> => {
+    if (!formularioRestaurante.certificado) {
+      throw new Error("Falta adjuntar el certificado del restaurante.");
+    }
+    if (!almacenamiento) {
+      throw new Error("Firebase Storage no está disponible.");
+    }
+
+    const referenciaCertificado = ref(
+      almacenamiento,
+      `certificados/${propietario.uid}/${crypto.randomUUID()}-${formularioRestaurante.certificado.name}`,
+    );
+    await subirArchivoConLimite(
+      referenciaCertificado,
+      formularioRestaurante.certificado,
+    );
+    const urlCertificado = await getDownloadURL(referenciaCertificado);
+    const datosRestaurante = {
+      nombre: formularioRestaurante.nombre.trim(),
+      direccion: formularioRestaurante.direccion.trim(),
+      comida: formularioRestaurante.comida.trim(),
+      certificado: urlCertificado,
+      propietario: propietario.uid,
+      menu: [],
+      menuPdfUrl: "",
+      menuPdfNombre: "",
+      creadoEn: serverTimestamp(),
+    };
+    if (!baseDatos) {
+      throw new Error("Firestore no está disponible para guardar el restaurante.");
+    }
+    const referenciaRestaurante = await esperarConLimite(
+      addDoc(collection(baseDatos, "restaurantes"), datosRestaurante),
+      "Firestore tardó demasiado al guardar el restaurante.",
+    );
+    const nuevoRestaurante = normalizarRestaurante(
+      referenciaRestaurante.id,
+      datosRestaurante,
+    );
+    const restaurantesActualizados = [
+      ...restaurantesPropietario,
+      nuevoRestaurante,
+    ];
+    setRestaurantesPropietario(restaurantesActualizados);
+    localStorage.setItem(
+      `silla-libre-restaurantes-${propietario.uid}`,
+      JSON.stringify(restaurantesActualizados),
+    );
+    setFormularioRestaurante(restauranteInicial);
   };
   const alternarFavorito = (id: number) => {
     setFavoritos((actuales) =>
@@ -243,6 +1879,7 @@ function App() {
 
   const gestionarAcceso = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
+    const datosRestauranteRegistro = { ...formularioRestaurante };
     setCargando(true);
     setMensaje("");
     try {
@@ -258,20 +1895,68 @@ function App() {
         );
         setTipoUsuario(tipoCuenta);
         localStorage.setItem(
-          "silla-libre-perfil",
-          JSON.stringify({ tipo: tipoCuenta, telefono: "", foto: "" }),
+          `silla-libre-perfil-${credencial.user.uid}`,
+          JSON.stringify({
+            tipo: tipoCuenta,
+            nombre: nombreUsuario.trim(),
+            telefono: "",
+            foto: "",
+          }),
         );
         setUsuario(credencial.user);
+        let mensajeCreacion =
+          "Tu cuenta fue creada correctamente.";
         try {
           await updateProfile(credencial.user, {
             displayName: nombreUsuario.trim(),
           });
-          setMensaje("Tu cuenta fue creada correctamente.");
         } catch {
-          setMensaje(
-            "Tu cuenta fue creada, pero no pudimos guardar el nombre. Puedes actualizarlo desde tu perfil.",
-          );
+          mensajeCreacion =
+            "Tu cuenta fue creada, pero no pudimos guardar el nombre. Puedes actualizarlo desde tu perfil.";
         }
+        if (baseDatos) {
+          try {
+            await setDoc(doc(baseDatos, "perfiles", credencial.user.uid), {
+              nombre: nombreUsuario.trim(),
+              tipo: tipoCuenta,
+              telefono: "",
+              foto: "",
+            });
+          } catch {
+            mensajeCreacion =
+              "Tu cuenta fue creada, pero no pudimos sincronizar el perfil. Inténtalo desde tu perfil más tarde.";
+          }
+        }
+        if (tipoCuenta === "restaurante") {
+          try {
+            await guardarRestaurantePropietario(credencial.user);
+            try {
+              await enviarSolicitudPorCorreo(
+                datosRestauranteRegistro,
+                credencial.user,
+              );
+              mensajeCreacion =
+                "Tu cuenta y restaurante fueron creados. La solicitud fue enviada a essillalibre@gmail.com.";
+            } catch (error) {
+              const detalle =
+                error instanceof Error
+                  ? error.message
+                  : "No se pudo conectar con el servidor de correo.";
+              mensajeCreacion =
+                `Tu cuenta y restaurante fueron creados, pero no se envió el correo a essillalibre@gmail.com: ${detalle}`;
+            }
+          } catch {
+            mensajeCreacion =
+              "Tu cuenta fue creada, pero no pudimos guardar el restaurante. Completa el envío desde tu perfil.";
+          }
+          window.history.pushState({}, "", "/perfil/restaurante");
+          setVista("perfil-restaurante");
+        } else {
+          window.history.pushState({}, "", "/perfil/usuario");
+          setVista("perfil-usuario");
+        }
+        setModal(null);
+        setMensaje(mensajeCreacion);
       } else {
         await signInWithEmailAndPassword(autenticacion, correo, contraseña);
         setModal(null);
@@ -286,47 +1971,308 @@ function App() {
     evento: React.FormEvent<HTMLFormElement>,
   ) => {
     evento.preventDefault();
-    if (!formularioRestaurante.certificado) {
+    if (!usuario) {
+      setMensaje("Inicia sesión con una cuenta de restaurante para continuar.");
+      return;
+    }
+    const datosFormulario = { ...formularioRestaurante };
+    if (!datosFormulario.certificado) {
       setMensaje("Adjunta el certificado de salubridad para continuar.");
       return;
     }
+    if (datosFormulario.certificado.size > 10 * 1024 * 1024) {
+      setMensaje("El certificado debe pesar 10 MB o menos.");
+      return;
+    }
+    const tipoCertificado = datosFormulario.certificado.type;
+    if (
+      tipoCertificado !== "application/pdf" &&
+      !tipoCertificado.startsWith("image/")
+    ) {
+      setMensaje("El certificado debe ser un PDF o una imagen.");
+      return;
+    }
     setCargando(true);
+    setMensaje("Guardando los datos del restaurante...");
+    let guardadoEnFirebase = false;
+    let mensajeGuardadoLocal = "";
     try {
-      let urlCertificado = "";
-      if (almacenamiento && usuario) {
-        const referencia = ref(
-          almacenamiento,
-          `certificados/${usuario.uid}/${formularioRestaurante.certificado.name}`,
+      await guardarRestaurantePropietario(usuario);
+      guardadoEnFirebase = true;
+    } catch (error) {
+      const idLocal = `local-${crypto.randomUUID()}`;
+      const restauranteLocal = normalizarRestaurante(idLocal, {
+        nombre: formularioRestaurante.nombre.trim(),
+        direccion: datosFormulario.direccion.trim(),
+        comida: datosFormulario.comida.trim(),
+        certificado: datosFormulario.certificado.name,
+        menu: [],
+      });
+      try {
+        const restaurantesLocales = [
+          ...leerRestaurantesLocales(usuario.uid),
+          restauranteLocal,
+        ];
+        localStorage.setItem(
+          `silla-libre-restaurantes-${usuario.uid}`,
+          JSON.stringify(restaurantesLocales),
         );
-        await uploadBytes(referencia, formularioRestaurante.certificado);
-        urlCertificado = await getDownloadURL(referencia);
+        localStorage.setItem(
+          `silla-libre-perfil-${usuario.uid}`,
+          JSON.stringify({
+            ...leerPerfilGuardado(usuario.uid),
+            tipo: "restaurante",
+          }),
+        );
+        setRestaurantesPropietario(restaurantesLocales);
+        setTipoUsuario("restaurante");
+        setFormularioRestaurante(restauranteInicial);
+        mensajeGuardadoLocal =
+          `Los datos quedaron guardados solo en este dispositivo. Firebase no pudo guardarlos: ${error instanceof Error ? error.message : "error de conexión"}.`;
+      } catch {
+        setMensaje("No se pudo guardar la información ni siquiera en este dispositivo. Revisa el espacio disponible e inténtalo de nuevo.");
+        return;
       }
-      if (baseDatos && usuario)
-        await addDoc(collection(baseDatos, "restaurantes"), {
-          ...formularioRestaurante,
-          certificado: urlCertificado,
-          propietario: usuario.uid,
-          creadoEn: serverTimestamp(),
-        });
+    }
+    setMensaje("Enviando la solicitud y el certificado al correo de Silla Libre...");
+    try {
+      await enviarSolicitudPorCorreo(datosFormulario, usuario);
       setMensaje(
-        firebaseDisponible
-          ? "Restaurante enviado para revisión."
-          : "Restaurante guardado en modo demostración.",
+        guardadoEnFirebase
+          ? "Restaurante guardado y solicitud enviada a essillalibre@gmail.com."
+          : `Solicitud enviada a essillalibre@gmail.com. ${mensajeGuardadoLocal}`,
       );
-      setFormularioRestaurante(restauranteInicial);
-    } catch {
-      setMensaje("No pudimos guardar el restaurante. Inténtalo de nuevo.");
+    } catch (error) {
+      const detalle =
+        error instanceof Error
+          ? error.name === "AbortError"
+            ? "El servidor de correo tardó demasiado."
+            : error.message
+          : "No fue posible conectar con el servidor de correo.";
+      setMensaje(
+        `${guardadoEnFirebase ? "El restaurante quedó guardado en Firebase" : "El restaurante quedó guardado solo en este dispositivo"}, pero no se envió el correo: ${detalle}`,
+      );
     } finally {
       setCargando(false);
     }
   };
-  const abrirReserva = (restaurante = restaurantes[0]) => {
+  const cambiarPlato = (
+    restauranteId: string,
+    platoId: string,
+    cambios: Partial<PlatoMenu>,
+  ) => {
+    setRestaurantesPropietario((actuales) =>
+      actuales.map((restaurante) =>
+        restaurante.id === restauranteId
+          ? {
+              ...restaurante,
+              menu: restaurante.menu.map((plato) =>
+                plato.id === platoId ? { ...plato, ...cambios } : plato,
+              ),
+            }
+          : restaurante,
+      ),
+    );
+  };
+  const agregarPlato = (restauranteId: string) => {
+    setRestaurantesPropietario((actuales) =>
+      actuales.map((restaurante) =>
+        restaurante.id === restauranteId
+          ? {
+              ...restaurante,
+              menu: [
+                ...restaurante.menu,
+                {
+                  id: crypto.randomUUID(),
+                  nombre: "",
+                  descripcion: "",
+                  precio: "",
+                },
+              ],
+            }
+          : restaurante,
+      ),
+    );
+  };
+  const quitarPlato = (restauranteId: string, platoId: string) => {
+    setRestaurantesPropietario((actuales) =>
+      actuales.map((restaurante) =>
+        restaurante.id === restauranteId
+          ? {
+              ...restaurante,
+              menu: restaurante.menu.filter((plato) => plato.id !== platoId),
+            }
+          : restaurante,
+      ),
+    );
+  };
+  const guardarMenu = async (restauranteId: string) => {
+    const restaurante = restaurantesPropietario.find(
+      (elemento) => elemento.id === restauranteId,
+    );
+    if (!restaurante || !usuario) return;
+    if (
+      restaurante.menu.some(
+        (plato) =>
+          !plato.nombre.trim() ||
+          !plato.precio ||
+          !Number.isFinite(Number(plato.precio)) ||
+          Number(plato.precio) < 0,
+      )
+    ) {
+      setMensaje("Completa el nombre y un precio válido para cada plato.");
+      return;
+    }
+    setCargando(true);
+    setMensaje("");
+    try {
+      if (baseDatos) {
+        await updateDoc(doc(baseDatos, "restaurantes", restauranteId), {
+          menu: restaurante.menu,
+        });
+      }
+      localStorage.setItem(
+        `silla-libre-restaurantes-${usuario.uid}`,
+        JSON.stringify(restaurantesPropietario),
+      );
+      setMensaje(`Menú de ${restaurante.nombre} actualizado correctamente.`);
+    } catch {
+      setMensaje("No pudimos guardar el menú. Inténtalo de nuevo.");
+    } finally {
+      setCargando(false);
+    }
+  };
+  const subirMenuArchivo = async (restauranteId: string, archivo: File) => {
+    if (!usuario) {
+      setMensaje("Inicia sesión con una cuenta de restaurante para subir el menú.");
+      return;
+    }
+    const extension = archivo.name.split(".").pop()?.toLowerCase();
+    const tiposArchivo: Record<string, string> = {
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+    if (!extension || !(extension in tiposArchivo)) {
+      setMensaje("El menú debe ser un archivo PDF o Word (.doc, .docx).");
+      setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
+      return;
+    }
+    if (archivo.size > 10 * 1024 * 1024) {
+      setMensaje("El archivo del menú debe pesar 10 MB o menos.");
+      setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
+      return;
+    }
+    if (!almacenamiento || !baseDatos) {
+      setMensaje("Firebase Storage y Firestore deben estar configurados para subir el menú.");
+      setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
+      return;
+    }
+    setCargando(true);
+    setProgresoMenu((actual) => ({ ...actual, [restauranteId]: 0 }));
+    setMensaje("");
+    try {
+      const referenciaMenu = ref(
+        almacenamiento,
+        `menus/${usuario.uid}/${restauranteId}/menu.${extension}`,
+      );
+      await subirArchivoConLimite(referenciaMenu, archivo, (porcentaje) => {
+        setProgresoMenu((actual) => ({
+          ...actual,
+          [restauranteId]: porcentaje,
+        }));
+      });
+      const menuPdfUrl = await getDownloadURL(referenciaMenu);
+      await esperarConLimite(
+        updateDoc(doc(baseDatos, "restaurantes", restauranteId), {
+          menuPdfUrl,
+          menuPdfNombre: archivo.name,
+        }),
+        "El archivo se subió, pero Firestore tardó demasiado al guardar el enlace.",
+      );
+      const restaurantesActualizados = restaurantesPropietario.map(
+        (restaurante) =>
+          restaurante.id === restauranteId
+            ? { ...restaurante, menuPdfUrl, menuPdfNombre: archivo.name }
+            : restaurante,
+      );
+      setRestaurantesPropietario(restaurantesActualizados);
+      localStorage.setItem(
+        `silla-libre-restaurantes-${usuario.uid}`,
+        JSON.stringify(restaurantesActualizados),
+      );
+      setMensaje(`Menú de ${restaurantesActualizados.find((restaurante) => restaurante.id === restauranteId)?.nombre ?? "tu restaurante"} actualizado.`);
+      setProgresoMenu((actual) => ({ ...actual, [restauranteId]: 100 }));
+    } catch (error) {
+      setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
+      setMensaje(
+        error instanceof Error
+          ? `No se pudo guardar el menú: ${error.message}`
+          : "No se pudo guardar el menú. Revisa la conexión y las reglas de Firebase.",
+      );
+    } finally {
+      setCargando(false);
+    }
+  };
+  const cancelarReserva = async (reserva: ReservaPerfil) => {
+    if (!reserva.id) {
+      setMensaje("No se puede cancelar esta reserva porque no tiene un registro guardado.");
+      return;
+    }
+    setCargando(true);
+    setMensaje("");
+    try {
+      if (baseDatos) {
+        await updateDoc(doc(baseDatos, "reservas", reserva.id), {
+          estado: "Cancelada",
+          canceladaEn: serverTimestamp(),
+        });
+      }
+      const reservasActualizadas = reservasPerfil.map((actual) =>
+        actual.id === reserva.id
+          ? { ...actual, estado: "Cancelada" }
+          : actual,
+      );
+      setReservasPerfil(reservasActualizadas);
+      if (usuario) {
+        localStorage.setItem(
+          `silla-libre-reservas-${usuario.uid}`,
+          JSON.stringify(reservasActualizadas),
+        );
+      }
+      setMensaje(`La reserva de ${reserva.restaurante} fue cancelada.`);
+    } catch {
+      setMensaje("No pudimos cancelar la reserva. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      setCargando(false);
+    }
+  };
+  const abrirReserva = (
+    restaurante = restaurantes[0],
+    datosIniciales?: Partial<FormularioReserva>,
+  ) => {
     setRestauranteActivo(restaurante);
+    setReserva((actual) => ({ ...actual, hora: "", ...datosIniciales }));
     setMensaje("");
     setModal("reserva");
   };
   const confirmarReserva = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
+    const horarioRestaurante =
+      restauranteActivo.id === 1
+        ? { apertura: "12:30", nombre: "Osaka Nikkei" }
+        : restauranteActivo.id === 2
+          ? { apertura: "12:00", nombre: "DonDoh Bogotá" }
+          : null;
+    if (
+      horarioRestaurante &&
+      (reserva.hora < horarioRestaurante.apertura || reserva.hora > "23:00")
+    ) {
+      setMensaje(
+        `${horarioRestaurante.nombre} recibe reservas de ${horarioRestaurante.apertura} p. m. a 11:00 p. m.`,
+      );
+      return;
+    }
     const datos: DatosReserva = {
       restaurante: restauranteActivo.nombre,
       fecha: reserva.fecha,
@@ -336,19 +2282,33 @@ function App() {
     };
     setCargando(true);
     try {
-      if (baseDatos)
-        await addDoc(collection(baseDatos, "reservas"), {
+      const reservaCreada = baseDatos
+        ? await addDoc(collection(baseDatos, "reservas"), {
           ...datos,
           usuario: usuario?.uid ?? "invitado",
+          estado: "Confirmada",
           creadoEn: serverTimestamp(),
-        });
-      const reservaGuardada = { ...datos, estado: "Confirmada" };
-      const reservasActualizadas = [...reservasPerfil, reservaGuardada];
-      setReservasPerfil(reservasActualizadas);
-      localStorage.setItem(
-        "silla-libre-reservas",
-        JSON.stringify(reservasActualizadas),
-      );
+        })
+        : null;
+      const reservaGuardada = {
+        ...datos,
+        id: reservaCreada?.id,
+        estado: "Confirmada",
+      };
+      if (usuario) {
+        const reservasActualizadas = [...reservasPerfil, reservaGuardada];
+        setReservasPerfil(reservasActualizadas);
+        localStorage.setItem(
+          `silla-libre-reservas-${usuario.uid}`,
+          JSON.stringify(reservasActualizadas),
+        );
+      } else {
+        const reservasInvitado = leerReservasGuardadas(null, correo);
+        localStorage.setItem(
+          "silla-libre-reservas",
+          JSON.stringify([...reservasInvitado, reservaGuardada]),
+        );
+      }
       crearEventoCalendario(datos);
       await avisarReserva(datos).catch(() => undefined);
       setReserva(reservaInicial);
@@ -367,32 +2327,188 @@ function App() {
     evento.preventDefault();
     if (!usuario) return;
     setCargando(true);
+    setMensaje("");
+    const nombreCompleto = [nombreUsuario.trim(), apellidoUsuario.trim()]
+      .filter(Boolean)
+      .join(" ");
+    const fotoSoloLocal = Boolean(archivoFotoPerfil && !almacenamiento);
+    const fotoLocalSeleccionada =
+      fotoPerfilPrevia || fotoPerfil || usuario.photoURL || "";
+    let fotoRemota = fotoPerfil || usuario.photoURL || "";
+    const perfilLocal = {
+      tipo: tipoUsuario,
+      nombre: nombreUsuario.trim(),
+      apellido: apellidoUsuario.trim(),
+      tratamiento: tratamientoUsuario,
+      fechaNacimiento,
+      telefono: telefono.trim(),
+      foto: fotoLocalSeleccionada,
+    };
     try {
+      localStorage.setItem(
+        `silla-libre-perfil-${usuario.uid}`,
+        JSON.stringify(perfilLocal),
+      );
+    } catch {
+      setMensaje("No pudimos guardar el perfil en este dispositivo.");
+      setCargando(false);
+      return;
+    }
+
+    try {
+      if (archivoFotoPerfil && almacenamiento) {
+        const referenciaFoto = ref(
+          almacenamiento,
+          `perfiles/${usuario.uid}/foto-perfil`,
+        );
+        await subirArchivoConLimite(referenciaFoto, archivoFotoPerfil);
+        fotoRemota = await getDownloadURL(referenciaFoto);
+        localStorage.setItem(
+          `silla-libre-perfil-${usuario.uid}`,
+          JSON.stringify({ ...perfilLocal, foto: fotoRemota }),
+        );
+        setFotoPerfil(fotoRemota);
+        setFotoPerfilPrevia("");
+        setArchivoFotoPerfil(null);
+      }
       await updateProfile(usuario, {
-        displayName: nombreUsuario.trim() || usuario.displayName || "",
-        photoURL: fotoPerfil || usuario.photoURL,
+        displayName: nombreCompleto || usuario.displayName || "",
+        photoURL: fotoRemota || null,
       });
       if (baseDatos)
         await setDoc(
           doc(baseDatos, "perfiles", usuario.uid),
-          { nombre: nombreUsuario.trim(), telefono, foto: fotoPerfil, tipo: tipoUsuario },
+          {
+            nombre: nombreCompleto,
+            nombrePila: nombreUsuario.trim(),
+            apellido: apellidoUsuario.trim(),
+            tratamiento: tratamientoUsuario,
+            fechaNacimiento,
+            telefono: telefono.trim(),
+            ...(fotoRemota ? { foto: fotoRemota } : {}),
+            tipo: tipoUsuario,
+          },
           { merge: true },
         );
+      const fotoGuardada = fotoRemota || fotoLocalSeleccionada;
       localStorage.setItem(
-        "silla-libre-perfil",
-        JSON.stringify({ tipo: tipoUsuario, telefono, foto: fotoPerfil }),
+        `silla-libre-perfil-${usuario.uid}`,
+        JSON.stringify({ ...perfilLocal, foto: fotoGuardada }),
       );
-      setMensaje("Perfil actualizado correctamente.");
+      setFotoPerfil(fotoGuardada);
+      setFotoPerfilPrevia("");
+      setArchivoFotoPerfil(null);
+      setMensaje(
+        fotoSoloLocal
+          ? "Perfil actualizado en este dispositivo. La foto no se sincronizará con otros dispositivos porque Firebase Storage no está disponible."
+          : "Perfil actualizado correctamente.",
+      );
     } catch {
-      setMensaje("No pudimos actualizar tu perfil. Inténtalo de nuevo.");
+      setMensaje(
+        archivoFotoPerfil
+          ? almacenamiento
+            ? "El teléfono y los demás datos quedaron guardados en este dispositivo, pero no pudimos subir la foto. Revisa la conexión y las reglas de Firebase Storage."
+            : "Los cambios se guardaron en este dispositivo. La foto no se sincronizará con otros dispositivos porque Firebase Storage no está disponible."
+          : "Los cambios se guardaron en este dispositivo, pero no pudimos sincronizarlos con Firebase. Revisa tu conexión y las reglas de Firestore.",
+      );
+    } finally {
+      setCargando(false);
+    }
+  };
+  const guardarFotoRestaurante = async (
+    evento: React.FormEvent<HTMLFormElement>,
+  ) => {
+    evento.preventDefault();
+    if (!usuario) return;
+    const archivoSeleccionado = archivoFotoPerfil;
+    if (!archivoSeleccionado) {
+      setMensaje("Selecciona una foto del restaurante antes de guardar.");
+      return;
+    }
+    setCargando(true);
+    setMensaje("Guardando la foto del restaurante...");
+    const fotoPreviaSeleccionada = fotoPerfilPrevia;
+    let fotoGuardada = fotoPreviaSeleccionada || fotoPerfil || "";
+    let fotoRemota = false;
+    try {
+      if (almacenamiento && baseDatos) {
+        const referenciaFoto = ref(
+          almacenamiento,
+          `perfiles/${usuario.uid}/foto-restaurante`,
+        );
+        await subirArchivoConLimite(referenciaFoto, archivoSeleccionado);
+        fotoGuardada = await getDownloadURL(referenciaFoto);
+        await esperarConLimite(
+          setDoc(
+            doc(baseDatos, "perfiles", usuario.uid),
+            { tipo: "restaurante", fotoRestaurante: fotoGuardada },
+            { merge: true },
+          ),
+          "Firestore tardó demasiado al guardar la foto.",
+        );
+        fotoRemota = true;
+      }
+      const perfilPrevio = leerPerfilGuardado(usuario.uid);
+      localStorage.setItem(
+        `silla-libre-perfil-${usuario.uid}`,
+        JSON.stringify({
+          ...perfilPrevio,
+          tipo: "restaurante",
+          fotoRestaurante: fotoGuardada,
+        }),
+      );
+      setFotoPerfil(fotoGuardada);
+      setFotoPerfilPrevia("");
+      setArchivoFotoPerfil(null);
+      setMensaje(
+        fotoRemota
+          ? "Foto del restaurante guardada y sincronizada."
+          : "Foto guardada solo en este dispositivo. Configura Firebase Storage y Firestore para sincronizarla.",
+      );
+    } catch {
+      try {
+        const fotoLocal = await crearFotoLocal(archivoSeleccionado);
+        const perfilPrevio = leerPerfilGuardado(usuario.uid);
+        localStorage.setItem(
+          `silla-libre-perfil-${usuario.uid}`,
+          JSON.stringify({
+            ...perfilPrevio,
+            tipo: "restaurante",
+            fotoRestaurante: fotoLocal,
+          }),
+        );
+        setFotoPerfil(fotoLocal);
+        setFotoPerfilPrevia("");
+        setArchivoFotoPerfil(null);
+        setMensaje("Foto guardada en este dispositivo, pero no se sincronizó con Firebase. Revisa las reglas de Storage y Firestore.");
+      } catch {
+      setMensaje(
+        "No se pudo guardar la foto. Revisa el almacenamiento local y las reglas de Firebase Storage y Firestore.",
+      );
+      }
     } finally {
       setCargando(false);
     }
   };
   const cambiarFoto = (archivo: File | undefined) => {
     if (!archivo) return;
+    if (!archivo.type.startsWith("image/")) {
+      setMensaje("Selecciona un archivo de imagen válido.");
+      return;
+    }
+    if (archivo.size > 5 * 1024 * 1024) {
+      setMensaje("La foto debe pesar 5 MB o menos.");
+      return;
+    }
     const lector = new FileReader();
-    lector.onload = () => setFotoPerfil(String(lector.result));
+    lector.onload = () => {
+      setArchivoFotoPerfil(archivo);
+      setFotoPerfilPrevia(String(lector.result));
+      setMensaje("");
+    };
+    lector.onerror = () => {
+      setMensaje("No pudimos leer la imagen. Inténtalo con otro archivo.");
+    };
     lector.readAsDataURL(archivo);
   };
 
@@ -401,16 +2517,16 @@ function App() {
       <header className="barra-navegacion">
         <button
           className="marca"
-          onClick={() => navegar("inicio")}
+          onClick={irAInicio}
           aria-label="Volver al inicio"
         >
-          <img src="/logo.png" alt="Silla Libre" className="logo-imagen" />
-          <span>
-            <strong>Silla Libre</strong>
-            <small>Tu mesa, a tu manera</small>
-          </span>
+          <img
+            src="/imagenes/logo-silla-libre.png"
+            alt="Logo de Silla Libre"
+            className="logo-imagen"
+          />
         </button>
-        <nav className="navegacion" aria-label="Navegación principal">
+        {vista === "inicio" && <nav className="navegacion" aria-label="Navegación principal">
           <button
             className={pestaña === "inicio" ? "activo" : ""}
             onClick={() => navegar("inicio")}
@@ -430,32 +2546,51 @@ function App() {
             Mis reservas
           </button>
           <button
-            className={pestaña === "perfil" ? "activo" : ""}
+            className={vista !== "inicio" ? "activo" : ""}
             onClick={() => (usuario ? navegar("perfil") : mostrarAcceso())}
           >
             Mi perfil
           </button>
-        </nav>
+        </nav>}
         <div className="acciones-navegacion">
-          {usuario ? (
-            <button className="perfil" onClick={() => navegar("perfil")}>
-              <span>{(usuario.displayName ?? usuario.email)?.slice(0, 1).toUpperCase()}</span>{" "}
-              {usuario.displayName || usuario.email}
-            </button>
+          {vista === "inicio" ? (
+            <>
+              {usuario ? (
+                <button className="perfil" onClick={irAlPerfil}>
+                  <span className="perfil-avatar">
+                    {fotoPerfilPrevia || fotoPerfil || usuario.photoURL ? (
+                      <img
+                        src={fotoPerfilPrevia || fotoPerfil || usuario.photoURL || ""}
+                        alt=""
+                      />
+                    ) : (
+                      (usuario.displayName ?? usuario.email)?.slice(0, 1).toUpperCase()
+                    )}
+                  </span>{" "}
+                  {usuario.displayName || usuario.email}
+                </button>
+              ) : (
+                <button className="enlace-boton" onClick={() => mostrarAcceso()}>
+                  Iniciar sesión
+                </button>
+              )}
+              <button
+                className="boton boton-dorado"
+                onClick={() => mostrarAcceso(true)}
+              >
+                Crear cuenta
+              </button>
+            </>
           ) : (
-            <button className="enlace-boton" onClick={() => mostrarAcceso()}>
-              Iniciar sesión
+            <button className="enlace-boton" onClick={irAInicio}>
+              ← Volver al inicio
             </button>
           )}
-          <button
-            className="boton boton-dorado"
-            onClick={() => mostrarAcceso(true)}
-          >
-            Crear cuenta
-          </button>
         </div>
       </header>
       <main>
+        {vista === "inicio" ? (
+          <>
         <section className="hero" id="inicio">
           <div className="hero-contenido">
             <p className="sobretitulo">BOGOTÁ · EXPERIENCIAS QUE PERMANECEN</p>
@@ -571,19 +2706,17 @@ function App() {
             {restaurantesFiltrados.map((restaurante) => (
               <article className="tarjeta-restaurante" key={restaurante.id}>
                 <div className="imagen-tarjeta">
-                  <a
+                  <button
                     className="enlace-imagen-restaurante"
-                    style={{ display: "block", height: "100%" }}
-                    href={restaurante.urlreserva}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`Visitar el sitio web de ${restaurante.nombre}`}
+                    type="button"
+                    onClick={() => abrirDetalleRestaurante(restaurante)}
+                    aria-label={`Ver detalles de ${restaurante.nombre}`}
                   >
                     <img
                       src={restaurante.imagen}
                       alt={`Interior de ${restaurante.nombre}`}
                     />
-                  </a>
+                  </button>
                   <span className="etiqueta-categoria">
                     {restaurante.categoria}
                   </span>
@@ -598,7 +2731,15 @@ function App() {
                 </div>
                 <div className="contenido-tarjeta">
                   <div className="fila-tarjeta">
-                    <h3>{restaurante.nombre}</h3>
+                    <h3>
+                      <button
+                        className="titulo-restaurante-enlace"
+                        type="button"
+                        onClick={() => abrirDetalleRestaurante(restaurante)}
+                      >
+                        {restaurante.nombre}
+                      </button>
+                    </h3>
                     <span className="calificacion">★ {restaurante.rating}</span>
                   </div>
                   <p className="ubicacion">
@@ -606,14 +2747,23 @@ function App() {
                     {restaurante.rangoprecios}
                   </p>
                   <p>{restaurante.descripcion}</p>
-                  <a
-                    className="reservar-enlace"
-                    href={restaurante.urlreserva}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Visitar sitio web <span>↗</span>
-                  </a>
+                  <div className="acciones-tarjeta">
+                    <button
+                      className="boton boton-vino"
+                      type="button"
+                      onClick={() => abrirReserva(restaurante)}
+                    >
+                      Reservar mesa
+                    </button>
+                    <a
+                      className="reservar-enlace"
+                      href={restaurante.urlreserva}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Visitar sitio web <span>↗</span>
+                    </a>
+                  </div>
                 </div>
               </article>
             ))}
@@ -660,35 +2810,117 @@ function App() {
             Registrar mi restaurante <span>↗</span>
           </button>
         </section>
-        {pestaña === "perfil" && usuario && (
-          <section className="perfil-seccion" id="perfil">
+          </>
+        ) : vista === "detalle-restaurante" && restauranteDetalle ? (
+          <DetalleRestaurante
+            key={restauranteDetalle.id}
+            restaurante={restauranteDetalle}
+            favorito={favoritos.includes(restauranteDetalle.id)}
+            alternarFavorito={() => alternarFavorito(restauranteDetalle.id)}
+            reservar={(seleccion) =>
+              abrirReserva(restauranteDetalle, seleccion)
+            }
+            usuario={usuario}
+            iniciarSesion={() => mostrarAcceso()}
+            volver={volverAListaRestaurantes}
+          />
+        ) : (
+          <section className="perfil-seccion">
             <div className="perfil-encabezado">
               <div>
-                <p className="sobretitulo oscuro">ESPACIO PERSONAL</p>
-                <h2>{tipoUsuario === "restaurante" ? "Tu negocio, en control." : "Tu perfil, a tu manera."}</h2>
+                <p className="sobretitulo oscuro">
+                  {vista === "perfil-restaurante"
+                    ? "ESPACIO DEL RESTAURANTE"
+                    : "ESPACIO PERSONAL"}
+                </p>
+                <h2>
+                  {vista === "perfil-restaurante"
+                    ? "Tu negocio, en control."
+                    : "Tu perfil, a tu manera."}
+                </h2>
                 <p className="texto-seccion">
-                  {tipoUsuario === "restaurante"
-                    ? "Revisa el movimiento de tu restaurante y entiende cuándo llegan tus clientes."
-                    : "Mantén tus datos listos para reservar y disfrutar sin interrupciones."}
+                  {vista === "perfil-restaurante"
+                    ? "Administra tus restaurantes, actualiza sus menús y revisa las reservas."
+                    : "Actualiza tus datos y consulta los detalles de tus reservas."}
                 </p>
               </div>
-              <button className="boton-texto" onClick={() => signOut(autenticacion!)}>Cerrar sesión <span>↗</span></button>
+              {usuario && (
+                <div className="acciones-perfil">
+                  {vista === "perfil-usuario" && (
+                    <button
+                      className="boton-texto"
+                      type="button"
+                      onClick={() => void abrirPerfilRestaurante()}
+                    >
+                      ¿Administras un restaurante? Abrir panel <span>↗</span>
+                    </button>
+                  )}
+                  <button className="boton-texto" onClick={() => void cerrarSesion()}>
+                    Cerrar sesión <span>↗</span>
+                  </button>
+                </div>
+              )}
             </div>
-            {tipoUsuario === "restaurante" ? (
-              <PanelRestaurante reservas={reservasPerfil} />
-            ) : (
-              <FormularioPerfil
-                usuario={usuario}
-                nombre={nombreUsuario || usuario.displayName || ""}
-                cambiarNombre={setNombreUsuario}
-                telefono={telefono}
-                cambiarTelefono={setTelefono}
-                foto={fotoPerfil || usuario.photoURL || ""}
+            {autenticacionCargando ? (
+              <p className="aviso perfil-aviso">Cargando tu perfil...</p>
+            ) : !usuario ? (
+              <div className="aviso perfil-aviso">
+                <p>Inicia sesión para consultar este espacio personal.</p>
+                <button className="boton boton-vino" onClick={() => mostrarAcceso()}>
+                  Iniciar sesión
+                </button>
+              </div>
+            ) : perfilCargando ? (
+              <p className="aviso perfil-aviso">Cargando la información de tu cuenta...</p>
+            ) : tipoUsuario === "restaurante" ||
+              vista === "perfil-restaurante" ? (
+              <PanelRestaurante
+                foto={fotoPerfilPrevia || fotoPerfil || usuario.photoURL || ""}
                 cambiarFoto={cambiarFoto}
-                guardar={guardarPerfil}
+                guardarPerfil={guardarFotoRestaurante}
+                restaurantes={restaurantesPropietario}
+                reservas={reservasPerfil}
+                datosFormulario={formularioRestaurante}
+                cambiarFormulario={setFormularioRestaurante}
+                registrarRestaurante={registrarRestaurante}
+                cambiarPlato={cambiarPlato}
+                agregarPlato={agregarPlato}
+                quitarPlato={quitarPlato}
+                guardarMenu={guardarMenu}
+                subirMenuArchivo={(restauranteId, archivo) =>
+                  void subirMenuArchivo(restauranteId, archivo)
+                }
+                progresoMenu={progresoMenu}
+                cancelarReserva={(reserva) => void cancelarReserva(reserva)}
                 cargando={cargando}
               />
+            ) : (
+              <>
+                <FormularioPerfil
+                  usuario={usuario}
+                  nombre={nombreUsuario || usuario.displayName || ""}
+                  cambiarNombre={setNombreUsuario}
+                  apellido={apellidoUsuario}
+                  cambiarApellido={setApellidoUsuario}
+                  tratamiento={tratamientoUsuario}
+                  cambiarTratamiento={setTratamientoUsuario}
+                  fechaNacimiento={fechaNacimiento}
+                  cambiarFechaNacimiento={setFechaNacimiento}
+                  mostrarDatosComensal
+                  telefono={telefono}
+                  cambiarTelefono={setTelefono}
+                  foto={fotoPerfilPrevia || fotoPerfil || usuario.photoURL || ""}
+                  cambiarFoto={cambiarFoto}
+                  guardar={guardarPerfil}
+                  cargando={cargando}
+                />
+                <ReservasUsuario
+                  reservas={reservasPerfil}
+                  cargando={reservasCargando}
+                />
+              </>
             )}
+            {mensaje && <p className="mensaje-modal perfil-mensaje" role="status">{mensaje}</p>}
           </section>
         )}
       </main>
@@ -726,7 +2958,7 @@ function App() {
                   <h2>{esRegistro ? "Crea tu cuenta" : "Qué bueno verte."}</h2>
                   <p>
                     {tipoCuenta === "restaurante"
-                      ? "Registra tu negocio para comenzar a recibir reservas."
+                        ? "Registra tu cuenta y administra los menús de tus restaurantes desde tu perfil."
                       : "Guarda tus lugares favoritos y reserva en segundos."}
                   </p>
                 </div>
@@ -747,12 +2979,6 @@ function App() {
                   </button>
                 </div>
                 <form onSubmit={gestionarAcceso} className="formulario">
-                  {tipoCuenta === "restaurante" && esRegistro && (
-                    <p className="aviso">
-                      Después de crear tu cuenta podrás completar los datos y
-                      certificado de tu restaurante.
-                    </p>
-                  )}
                   {esRegistro && (
                     <label>
                       Nombre de usuario
@@ -764,6 +2990,74 @@ function App() {
                         placeholder="Ej. mariana23"
                       />
                     </label>
+                  )}
+                  {esRegistro && tipoCuenta === "restaurante" && (
+                    <>
+                      <div className="separador-formulario">
+                        <span>DATOS DEL RESTAURANTE</span>
+                      </div>
+                      <label>
+                        Nombre del restaurante
+                        <input
+                          value={formularioRestaurante.nombre}
+                          onChange={(evento) =>
+                            setFormularioRestaurante({
+                              ...formularioRestaurante,
+                              nombre: evento.target.value,
+                            })
+                          }
+                          required
+                          placeholder="Ej. Casa M"
+                        />
+                      </label>
+                      <label>
+                        Dirección del restaurante
+                        <input
+                          value={formularioRestaurante.direccion}
+                          onChange={(evento) =>
+                            setFormularioRestaurante({
+                              ...formularioRestaurante,
+                              direccion: evento.target.value,
+                            })
+                          }
+                          required
+                          placeholder="Calle, número y ciudad"
+                        />
+                      </label>
+                      <label>
+                        Tipo de comida
+                        <input
+                          value={formularioRestaurante.comida}
+                          onChange={(evento) =>
+                            setFormularioRestaurante({
+                              ...formularioRestaurante,
+                              comida: evento.target.value,
+                            })
+                          }
+                          required
+                          placeholder="Ej. Cocina colombiana"
+                        />
+                      </label>
+                      <label className="carga-archivo">
+                        Certificado de funcionamiento del restaurante
+                        <input
+                          type="file"
+                          accept="application/pdf,image/*"
+                          onChange={(evento) =>
+                            setFormularioRestaurante({
+                              ...formularioRestaurante,
+                              certificado:
+                                evento.target.files?.[0] ?? null,
+                            })
+                          }
+                          required
+                        />
+                        <span>
+                          {formularioRestaurante.certificado?.name ??
+                            "Sube un PDF o una imagen"}
+                        </span>
+                      </label>
+                    </>
                   )}
                   <label>
                     Correo electrónico
@@ -797,14 +3091,6 @@ function App() {
                         : "Iniciar sesión"}
                   </button>
                 </form>
-                {esRegistro && tipoCuenta === "restaurante" && (
-                  <FormularioRestaurante
-                    datos={formularioRestaurante}
-                    cambiar={setFormularioRestaurante}
-                    enviar={registrarRestaurante}
-                    cargando={cargando}
-                  />
-                )}
               </>
             )}
             {modal === "reserva" && (
@@ -835,11 +3121,29 @@ function App() {
                       <input
                         type="time"
                         value={reserva.hora}
+                        min={
+                          restauranteActivo.id === 1
+                            ? "12:30"
+                            : restauranteActivo.id === 2
+                              ? "12:00"
+                              : undefined
+                        }
+                        max={
+                          restauranteActivo.id === 1 || restauranteActivo.id === 2
+                            ? "23:00"
+                            : undefined
+                        }
                         onChange={(e) =>
                           setReserva({ ...reserva, hora: e.target.value })
                         }
                         required
                       />
+                      {restauranteActivo.id === 1 && (
+                        <small>Horario de Osaka Nikkei: 12:30 p. m. – 11:00 p. m.</small>
+                      )}
+                      {restauranteActivo.id === 2 && (
+                        <small>Horario de DonDoh Bogotá: 12:00 p. m. – 11:00 p. m.</small>
+                      )}
                     </label>
                   </div>
                   <label>
@@ -956,11 +3260,19 @@ function FormularioRestaurante({
 
 function Mapa() {
   const referenciaMapa = useRef<HTMLDivElement>(null);
+  const [mensajeMapa, setMensajeMapa] = useState(
+    import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+      ? "Cargando Google Maps..."
+      : "Configura VITE_GOOGLE_MAPS_API_KEY para activar el mapa",
+  );
   useEffect(() => {
     const clave = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!clave || !referenciaMapa.current) return;
     const mostrarMapa = () => {
-      if (!window.google || !referenciaMapa.current) return;
+      if (!window.google || !referenciaMapa.current) {
+        setMensajeMapa("No se pudo inicializar Google Maps. Verifica la clave y sus permisos.");
+        return;
+      }
       const mapa = new window.google.maps.Map(referenciaMapa.current, {
         center: { lat: 4.667, lng: -74.056 },
         zoom: 13,
@@ -977,8 +3289,16 @@ function Mapa() {
       const script = document.createElement("script");
       script.src = `https://maps.googleapis.com/maps/api/js?key=${clave}`;
       script.async = true;
-      script.onload = mostrarMapa;
-      document.head.appendChild(script);
+    script.onload = () => {
+      if (window.google) mostrarMapa();
+      else {
+        setMensajeMapa("No se pudo inicializar Google Maps. Verifica la clave y sus permisos.");
+      }
+    };
+    script.onerror = () => {
+      setMensajeMapa("No se pudo cargar Google Maps. Verifica la conexión, facturación y restricciones de la clave.");
+    };
+    document.head.appendChild(script);
     }
   }, []);
   return (
@@ -987,7 +3307,7 @@ function Mapa() {
       <div className="mapa-fallback">
         <span>⌖</span>
         <strong>Zona T · Chapinero · Chicó</strong>
-        <small>Activa Google Maps para explorar</small>
+        <small>{mensajeMapa}</small>
       </div>
     </div>
   );

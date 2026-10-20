@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap');
 
 :root { --vino: #651f36; 
-    --vino-profundo: #3b1725; 
+    --vino-profundo: #2b0711;
     --vino-claro: #8d3c55; 
     --dorado: #d9b978; 
     --crema: #f8f4ed; 
@@ -41,18 +41,18 @@ button:focus-visible, input:focus-visible, select:focus-visible {
       padding: 0; 
       display: flex;
        align-items: center;
-        gap: 12px; 
         color: var(--blanco); 
         background: none;
          text-align: left;
          }
 .logo-imagen {
-     width: 92px;
-      height: 88px; 
+     display: block;
+      width: 158px;
+      height: 100px;
       object-fit: contain;
-       object-position: center; 
-       border: 1px solid var(--dorado); 
-       background: var(--vino-profundo); 
+      object-position: center;
+      border: 0;
+      background: transparent;
     }
 .marca strong, .marca small {
      display: block; 
@@ -128,7 +128,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .boton.grande { padding: 16px 23px; }
 .boton span { margin-left: 12px; }
 .perfil { display: flex; align-items: center; gap: 7px; border: 0; color: var(--blanco); background: none; font-size: 11px; }
-.perfil span { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: var(--vino-profundo); background: var(--dorado); font-weight: 700; }
+.perfil-avatar { width: 27px; height: 27px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: var(--vino-profundo); background: var(--dorado); font-weight: 700; }
+.perfil-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .hero { min-height: 650px; padding: 76px 8vw 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 6vw; align-items: center; color: var(--blanco); background: var(--vino-profundo); }
 .hero-contenido { max-width: 590px; animation: aparecer .7s ease both; }
 .sobretitulo { margin: 0 0 19px; color: var(--dorado); font-size: 10px; letter-spacing: 2.6px; font-weight: 700; }
@@ -151,11 +152,11 @@ h1 em, h2 em { color: var(--dorado); font-weight: 500; }
 .buscador-seccion, .listado, .mapa-seccion { padding: 100px 8vw; }
 .buscador-seccion { background: var(--blanco); }.encabezado-seccion, .encabezado-listado { display: flex; justify-content: space-between; align-items: end; gap: 40px; }.encabezado-seccion h2, .mapa-seccion h2, .cta-restaurante h2 { margin-bottom: 0; font-size: 47px; line-height: 1.05; color: var(--vino-profundo); }.encabezado-seccion h2 em, .mapa-seccion h2 em, .encabezado-listado h2 em, .cta-restaurante h2 em { color: var(--vino-claro); }.texto-seccion { max-width: 310px; margin: 0 4vw 5px 0; color: var(--gris); font-size: 13px; line-height: 1.8; }
 .buscador { max-width: 1060px; min-height: 70px; margin-top: 47px; padding: 10px 10px 10px 20px; display: flex; align-items: center; gap: 12px; border: 1px solid #dfd6c9; background: var(--crema); }.icono { color: var(--vino); font-size: 28px; }.buscador input { min-width: 150px; flex: 1; border: 0; outline: 0; color: var(--tinta); background: transparent; font-size: 13px; }.buscador select { padding: 14px; border: 0; border-left: 1px solid #dcd2c7; outline: 0; color: var(--gris); background: transparent; font-size: 12px; }.etiquetas { display: flex; gap: 16px; align-items: center; margin-top: 19px; color: #a39a92; font-size: 11px; }.etiquetas button { padding: 5px 12px; border: 1px solid #ddd2c8; color: var(--gris); background: transparent; font-size: 11px; }.etiquetas button:hover { border-color: var(--vino); color: var(--vino); }
-.listado { background: var(--crema); }.contador { color: var(--vino); font-size: 10px; letter-spacing: 1.7px; text-transform: uppercase; }.encabezado-listado h2 { margin: 17px 0 0; color: var(--vino-profundo); font-size: 40px; }.boton-texto { padding: 0 0 7px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; }.boton-texto span { margin-left: 14px; font-size: 18px; }.tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 45px; }.tarjeta-restaurante { background: var(--blanco); }.imagen-tarjeta { height: 220px; position: relative; overflow: hidden; }.imagen-tarjeta img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .5s ease; }.tarjeta-restaurante:hover img { transform: scale(1.04); }.etiqueta-categoria { position: absolute; left: 15px; bottom: 15px; padding: 6px 10px; color: var(--blanco); background: var(--vino); font-size: 9px; letter-spacing: .5px; }.favorito { position: absolute; top: 12px; right: 12px; width: 31px; height: 31px; border: 0; border-radius: 50%; color: var(--vino); background: var(--blanco); font-size: 20px; line-height: 1; }.contenido-tarjeta { padding: 22px 20px 23px; }.fila-tarjeta { display: flex; justify-content: space-between; gap: 10px; }.fila-tarjeta h3 { margin-bottom: 8px; color: var(--vino-profundo); font: 600 22px 'Playfair Display'; }.calificacion { color: #bd8f35; font-size: 12px; }.ubicacion { margin-bottom: 17px; color: var(--vino-claro); font-size: 11px; }.ubicacion span { margin: 0 5px; color: #c9beb5; }.contenido-tarjeta > p:not(.ubicacion) { min-height: 48px; color: var(--gris); font-size: 12px; line-height: 1.65; }.reservar-enlace { padding: 0 0 3px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; }.reservar-enlace span { margin-left: 12px; }
+.listado { background: var(--crema); }.contador { color: var(--vino); font-size: 10px; letter-spacing: 1.7px; text-transform: uppercase; }.encabezado-listado h2 { margin: 17px 0 0; color: var(--vino-profundo); font-size: 40px; }.boton-texto { padding: 0 0 7px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; }.boton-texto span { margin-left: 14px; font-size: 18px; }.tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 45px; }.tarjeta-restaurante { background: var(--blanco); }.imagen-tarjeta { height: 220px; position: relative; overflow: hidden; }.imagen-tarjeta img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .5s ease; }.tarjeta-restaurante:hover img { transform: scale(1.04); }.etiqueta-categoria { position: absolute; left: 15px; bottom: 15px; padding: 6px 10px; color: var(--blanco); background: var(--vino); font-size: 9px; letter-spacing: .5px; }.favorito { position: absolute; top: 12px; right: 12px; width: 31px; height: 31px; border: 0; border-radius: 50%; color: var(--vino); background: var(--blanco); font-size: 20px; line-height: 1; }.contenido-tarjeta { padding: 22px 20px 23px; }.fila-tarjeta { display: flex; justify-content: space-between; gap: 10px; }.fila-tarjeta h3 { margin-bottom: 8px; color: var(--vino-profundo); font: 600 22px 'Playfair Display'; }.calificacion { color: #bd8f35; font-size: 12px; }.ubicacion { margin-bottom: 17px; color: var(--vino-claro); font-size: 11px; }.ubicacion span { margin: 0 5px; color: #c9beb5; }.contenido-tarjeta > p:not(.ubicacion) { min-height: 48px; color: var(--gris); font-size: 12px; line-height: 1.65; }.acciones-tarjeta { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; }.acciones-tarjeta .boton { font-size: 11px; }.reservar-enlace { padding: 0 0 3px; border: 0; border-bottom: 1px solid var(--vino); color: var(--vino); background: none; font-size: 12px; white-space: nowrap; }.reservar-enlace span { margin-left: 12px; }
 .mapa-seccion { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8vw; align-items: center; background: var(--hueso); }.mapa-seccion .texto-seccion { margin: 25px 0 28px; }.mapa { height: 330px; position: relative; overflow: hidden; background: #ddd6c9; }.mapa-interactivo { width: 100%; height: 100%; }.mapa-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--vino); background: radial-gradient(circle at center, #eadfcd99, #c9bba855), url('https://images.unsplash.com/photo-1518005020951-eccb494ad742?auto=format&fit=crop&w=1200&q=70') center/cover; }.mapa-fallback span { font-size: 42px; }.mapa-fallback strong { font: 20px 'Playfair Display'; }.mapa-fallback small { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }.mapa-interactivo:not(:empty) + .mapa-fallback { display: none; }
 .cta-restaurante { padding: 75px 8vw; display: flex; align-items: center; justify-content: space-between; gap: 30px; color: var(--blanco); background: var(--vino); }.cta-restaurante h2 { color: var(--blanco); }.cta-restaurante h2 em { color: var(--dorado); }.cta-restaurante p:last-child { margin: 19px 0 0; color: #d8c5c7; font-size: 13px; }
 footer { padding: 28px 8vw; display: flex; justify-content: space-between; color: #ad9c9a; background: var(--vino-profundo); font-size: 10px; }.marca-footer { color: var(--dorado); font: 20px 'Playfair Display'; }
-.fondo-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #27151dcc; animation: aparecer .2s ease; }.modal { width: min(510px, 100%); max-height: 92vh; overflow-y: auto; position: relative; padding: 40px; background: var(--blanco); box-shadow: 0 22px 70px #21141b66; }.cerrar-modal { position: absolute; top: 15px; right: 19px; border: 0; color: var(--gris); background: none; font-size: 27px; }.icono-modal { display: block; margin-bottom: 12px; color: var(--vino); font-size: 22px; }.encabezado-modal h2 { margin: 0 0 9px; color: var(--vino-profundo); font-size: 36px; }.encabezado-modal > p:last-child { margin-bottom: 24px; color: var(--gris); font-size: 12px; }.pestanas-modal { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 20px; border-bottom: 1px solid #dfd6cc; }.pestanas-modal button { padding: 12px; border: 0; border-bottom: 2px solid transparent; color: var(--gris); background: none; font-size: 12px; }.pestanas-modal button.seleccionada { border-color: var(--vino); color: var(--vino); font-weight: 700; }.formulario { display: grid; gap: 15px; }.formulario label { display: grid; gap: 7px; color: var(--tinta); font-size: 11px; font-weight: 600; }.formulario input, .formulario select { width: 100%; padding: 13px 12px; border: 1px solid #d9d0c5; border-radius: 0; outline: 0; color: var(--tinta); background: var(--crema); font-size: 12px; }.formulario input:focus, .formulario select:focus { border-color: var(--vino); }.boton-formulario { width: 100%; margin-top: 5px; }.campos-dobles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.aviso, .mensaje-modal { padding: 11px 13px; color: var(--vino); background: #f5ebdc; font-size: 11px; line-height: 1.5; }.mensaje-modal { margin: 18px 0 0; border-left: 3px solid var(--dorado); }.separador-formulario { padding-top: 5px; color: var(--vino); border-top: 1px solid #ded5ca; font-size: 9px; letter-spacing: 1.5px; }.carga-archivo { padding: 13px; border: 1px dashed #c9b9aa; background: var(--crema); }.carga-archivo input { display: none; }.carga-archivo span { color: var(--gris); font-weight: 400; }
+.fondo-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #27151dcc; animation: aparecer .2s ease; }.modal { width: min(510px, 100%); max-height: 92vh; overflow-y: auto; position: relative; padding: 40px; background: var(--blanco); box-shadow: 0 22px 70px #21141b66; }.cerrar-modal { position: absolute; top: 15px; right: 19px; border: 0; color: var(--gris); background: none; font-size: 27px; }.icono-modal { display: block; margin-bottom: 12px; color: var(--vino); font-size: 22px; }.encabezado-modal h2 { margin: 0 0 9px; color: var(--vino-profundo); font-size: 36px; }.encabezado-modal > p:last-child { margin-bottom: 24px; color: var(--gris); font-size: 12px; }.pestanas-modal { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 20px; border-bottom: 1px solid #dfd6cc; }.pestanas-modal button { padding: 12px; border: 0; border-bottom: 2px solid transparent; color: var(--gris); background: none; font-size: 12px; }.pestanas-modal button.seleccionada { border-color: var(--vino); color: var(--vino); font-weight: 700; }.formulario { display: grid; gap: 15px; }.formulario label { display: grid; gap: 7px; color: var(--tinta); font-size: 11px; font-weight: 600; }.formulario input, .formulario select { width: 100%; padding: 13px 12px; border: 1px solid #d9d0c5; border-radius: 0; outline: 0; color: var(--tinta); background: var(--crema); font-size: 12px; }.formulario input:focus, .formulario select:focus { border-color: var(--vino); }.boton-formulario { width: 100%; margin-top: 5px; }.campos-dobles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.aviso, .mensaje-modal { padding: 11px 13px; color: var(--vino); background: #f5ebdc; font-size: 11px; line-height: 1.5; }.mensaje-modal { margin: 18px 0 0; border-left: 3px solid var(--dorado); }.separador-formulario { padding-top: 5px; color: var(--vino); border-top: 1px solid #ded5ca; font-size: 9px; letter-spacing: 1.5px; }.carga-archivo { padding: 13px; border: 1px dashed #c9b9aa; background: var(--crema); }.carga-archivo input { display: block; padding: 8px 0; border: 0; background: transparent; }.carga-archivo span { color: var(--gris); font-weight: 400; }
 @keyframes aparecer { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 900px) { .navegacion { margin-left: 0; gap: 17px; }.acciones-navegacion .enlace-boton { display: none; }.hero { grid-template-columns: 1fr; padding-top: 60px; }.hero-imagen { height: 360px; max-width: 650px; width: 100%; }.tarjetas { grid-template-columns: repeat(2, 1fr); }.mapa-seccion { grid-template-columns: 1fr; gap: 35px; }.mapa { height: 280px; }.cta-restaurante { align-items: start; flex-direction: column; } }
 @media (max-width: 620px) { .barra-navegacion { height: auto; padding: 18px 5vw; flex-wrap: wrap; gap: 17px; }.navegacion { order: 3; width: 100%; justify-content: space-between; }.acciones-navegacion { margin-left: auto; }.acciones-navegacion .boton { padding: 10px 12px; font-size: 11px; }.hero { min-height: auto; padding: 57px 7vw 75px; }.hero-imagen { height: 290px; }.nota-hero { left: 10px; bottom: 15px; }.buscador-seccion, .listado, .mapa-seccion { padding: 65px 7vw; }.encabezado-seccion, .encabezado-listado { display: block; }.encabezado-seccion h2, .mapa-seccion h2, .cta-restaurante h2 { font-size: 39px; }.texto-seccion { margin: 25px 0 0; }.buscador { align-items: stretch; flex-wrap: wrap; padding: 14px; }.buscador input { min-width: calc(100% - 40px); }.buscador select { width: 100%; border-top: 1px solid #dcd2c7; border-left: 0; }.buscador .boton { width: 100%; }.etiquetas { flex-wrap: wrap; }.boton-texto { margin-top: 22px; }.tarjetas { grid-template-columns: 1fr; }.imagen-tarjeta { height: 230px; }.cta-restaurante { padding: 60px 7vw; }footer { padding: 26px 7vw; flex-wrap: wrap; gap: 13px; }.modal { padding: 31px 22px; }.encabezado-modal h2 { font-size: 31px; } }
@@ -164,7 +165,14 @@ footer { padding: 28px 8vw; display: flex; justify-content: space-between; color
 .perfil-encabezado { max-width: 1180px; margin: 0 auto 42px; display: flex; align-items: end; justify-content: space-between; gap: 30px; }
 .perfil-encabezado h2 { max-width: 600px; margin: 14px 0 0; color: var(--vino-profundo); font: 600 46px 'Playfair Display', serif; }
 .perfil-encabezado .texto-seccion { max-width: 530px; margin: 18px 0 0; }
+.acciones-perfil { display: flex; align-items: center; gap: 24px; }
 .perfil-grid, .panel-restaurante { max-width: 1180px; margin: auto; }
+.identidad-restaurante { display: flex; align-items: center; gap: 24px; padding: 28px; background: var(--blanco); }
+.identidad-restaurante .avatar-grande { flex: 0 0 110px; width: 110px; height: 110px; margin: 0; font-size: 46px; }
+.identidad-restaurante > div:nth-child(2) { flex: 1; }
+.identidad-restaurante > div:nth-child(2) > p:last-child { margin: 8px 0 0; color: var(--gris); font-size: 10px; }
+.identidad-restaurante .sobretitulo { margin-bottom: 12px; }
+.identidad-restaurante .boton-foto input { display: none; }
 .perfil-grid { display: grid; grid-template-columns: 280px minmax(0, 520px); gap: 70px; padding: 38px; background: var(--blanco); }
 .perfil-identidad { text-align: center; }
 .avatar-grande { width: 150px; height: 150px; margin: 0 auto 20px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--dorado); border-radius: 50%; color: var(--blanco); background: var(--vino); font: 600 60px 'Playfair Display', serif; }
@@ -173,7 +181,43 @@ footer { padding: 28px 8vw; display: flex; justify-content: space-between; color
 .boton-foto input { display: none; }
 .perfil-identidad p { color: var(--gris); font-size: 10px; }
 .perfil-formulario { align-content: start; padding-top: 8px; }
+.ayuda-perfil { margin: -5px 0 4px; color: var(--gris); font-size: 11px; line-height: 1.6; }
+.opciones-tratamiento { display: flex; flex-wrap: wrap; gap: 18px; margin: 0; padding: 0; border: 0; }
+.opciones-tratamiento legend { margin-bottom: 10px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.formulario .opciones-tratamiento label { display: flex; align-items: center; gap: 7px; color: var(--gris); font-size: 12px; font-weight: 400; }
+.formulario .opciones-tratamiento input { width: auto; margin: 0; padding: 0; accent-color: var(--vino); }
+.reservas-usuario { max-width: 1180px; margin: 32px auto 0; padding: 30px 38px; background: var(--blanco); }
+.reserva-usuario { display: grid; grid-template-columns: 1.1fr .8fr 1.4fr .8fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid #e4dbd1; }
+.reserva-usuario:last-child { border-bottom: 0; }
+.reserva-usuario div { display: grid; gap: 7px; align-content: start; }
+.reserva-usuario span { color: var(--gris); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+.reserva-usuario strong { color: var(--vino-profundo); font-size: 12px; text-transform: capitalize; }
+.perfil-aviso { max-width: 1180px; margin: 0 auto; }
+.perfil-aviso p { margin-bottom: 14px; }
+.perfil-mensaje { max-width: 1180px; margin: 20px auto 0; }
 .panel-restaurante { display: grid; gap: 24px; }
+.encabezado-panel-restaurante, .restaurante-admin { padding: 30px; background: var(--blanco); }
+.encabezado-panel-restaurante h3, .titulo-restaurante-admin h3 { margin: 0 0 8px; color: var(--vino-profundo); font: 600 25px 'Playfair Display', serif; }
+.encabezado-panel-restaurante p:last-child, .titulo-restaurante-admin p { margin: 0; color: var(--gris); font-size: 12px; }
+.titulo-restaurante-admin { display: flex; justify-content: space-between; align-items: start; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid #e4dbd1; }
+.titulo-restaurante-admin .sobretitulo { display: block; margin-bottom: 10px; font-size: 9px; }
+.menu-admin { padding-top: 24px; }
+.menu-archivo-actual { margin: 0 0 14px; font-size: 12px; }
+.menu-archivo-actual a { color: var(--vino); font-weight: 600; }
+.selector-menu-archivo { display: flex; align-items: center; gap: 15px; width: fit-content; max-width: 100%; padding: 10px; border: 1px dashed #c9b9aa; background: var(--crema); cursor: pointer; }
+.selector-menu-archivo input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.selector-menu-archivo input:focus-visible + .boton { outline: 2px solid var(--dorado); outline-offset: 3px; }
+.selector-menu-archivo .boton { flex: 0 0 auto; }
+.selector-menu-detalle { color: var(--gris); font-size: 11px; }
+.progreso-menu { display: flex; align-items: center; gap: 10px; max-width: 420px; margin-top: 12px; color: var(--gris); font-size: 11px; }
+.progreso-menu progress { width: min(240px, 60%); height: 8px; accent-color: var(--vino); }
+.plato-editor { display: grid; grid-template-columns: 1fr 1.4fr .7fr auto; align-items: end; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #eee7dc; }
+.plato-editor label { display: grid; gap: 7px; color: var(--tinta); font-size: 10px; font-weight: 600; }
+.plato-editor input { min-width: 0; width: 100%; padding: 11px; border: 1px solid #d9d0c5; color: var(--tinta); background: var(--crema); font-size: 11px; }
+.boton-quitar-plato { white-space: nowrap; }
+.acciones-menu { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 20px; }
+.acciones-menu .boton-texto { margin: 0; }
+.formulario-restaurante { max-width: 720px; }
 .resumen-reservas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #d7cbbd; }
 .resumen-reservas > div { min-height: 145px; padding: 25px; background: var(--blanco); }
 .resumen-reservas span, .resumen-reservas small { display: block; color: var(--gris); font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; }
@@ -195,5 +239,102 @@ footer { padding: 28px 8vw; display: flex; justify-content: space-between; color
 .fila-reserva strong { color: var(--vino-profundo); font-weight: 600; }
 .fila-reserva em { padding: 5px 8px; color: #527052; background: #e7f0e4; font-size: 9px; font-style: normal; }
 .fila-reserva em.pendiente { color: #916c35; background: #f6eddb; }
-@media (max-width: 900px) { .perfil-grid { grid-template-columns: 220px 1fr; gap: 35px; }.fila-reserva { grid-template-columns: 100px 150px 1fr auto; } }
-@media (max-width: 620px) { .perfil-seccion { padding: 65px 7vw 80px; }.perfil-encabezado { display: block; }.perfil-encabezado h2 { font-size: 39px; }.perfil-encabezado .boton-texto { margin-top: 25px; }.perfil-grid { grid-template-columns: 1fr; gap: 28px; padding: 24px; }.resumen-reservas, .estadisticas-grid { grid-template-columns: 1fr; }.resumen-reservas > div { min-height: auto; }.fila-reserva { grid-template-columns: 1fr 1fr; gap: 8px; }.fila-reserva small { grid-column: 1 / 2; overflow: hidden; text-overflow: ellipsis; }.fila-reserva em { justify-self: end; } }
+@media (max-width: 900px) { .perfil-grid { grid-template-columns: 220px 1fr; gap: 35px; }.fila-reserva { grid-template-columns: 100px 150px 1fr auto; }.plato-editor { grid-template-columns: 1fr 1fr; }.reserva-usuario { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) { .perfil-seccion { padding: 65px 7vw 80px; }.perfil-encabezado { display: block; }.perfil-encabezado h2 { font-size: 39px; }.perfil-encabezado .boton-texto { margin-top: 25px; }.acciones-perfil { align-items: flex-start; flex-direction: column; gap: 8px; }.perfil-grid { grid-template-columns: 1fr; gap: 28px; padding: 24px; }.identidad-restaurante { align-items: flex-start; flex-wrap: wrap; padding: 22px; }.identidad-restaurante .avatar-grande { flex-basis: 82px; width: 82px; height: 82px; font-size: 36px; }.identidad-restaurante > .boton { width: 100%; }.resumen-reservas, .estadisticas-grid { grid-template-columns: 1fr; }.resumen-reservas > div { min-height: auto; }.fila-reserva { grid-template-columns: 1fr 1fr; gap: 8px; }.fila-reserva small { grid-column: 1 / 2; overflow: hidden; text-overflow: ellipsis; }.fila-reserva em { justify-self: end; }.restaurante-admin, .encabezado-panel-restaurante, .reservas-usuario { padding: 22px; }.titulo-restaurante-admin { display: block; }.titulo-restaurante-admin .contador { display: inline-block; margin-top: 14px; }.plato-editor, .reserva-usuario { grid-template-columns: 1fr; }.acciones-menu { align-items: stretch; flex-direction: column; }.acciones-menu button { width: 100%; }.acciones-menu .boton-texto { padding: 10px 0; } }
+
+.imagen-tarjeta .enlace-imagen-restaurante {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  display: block;
+  border: 0;
+  background: transparent;
+}
+.titulo-restaurante-enlace {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+.titulo-restaurante-enlace:hover { color: var(--vino-claro); }
+.detalle-restaurante { min-height: 65vh; padding: 42px 8vw 90px; background: var(--crema); }
+.detalle-migas { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 30px; color: var(--gris); font-size: 11px; }
+.detalle-migas button { padding: 0; border: 0; color: var(--vino); background: transparent; font: inherit; }
+.detalle-migas strong { color: var(--tinta); font-weight: 600; }
+.detalle-columnas { display: grid; grid-template-columns: minmax(0, 1fr) 310px; align-items: start; gap: 34px; }
+.detalle-titulo { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+.detalle-titulo h1 { margin-bottom: 10px; color: var(--vino-profundo); font-size: clamp(38px, 4vw, 56px); }
+.detalle-titulo p { margin-bottom: 8px; color: var(--gris); font-size: 13px; }
+.detalle-titulo p span { margin: 0 5px; color: #b7a99b; }
+.detalle-titulo .detalle-calificacion { color: #9b752d; }
+.detalle-favorito { position: static; flex: 0 0 40px; width: 40px; height: 40px; border: 1px solid #e4d9cb; }
+.detalle-galeria { height: 365px; position: relative; overflow: hidden; background: var(--hueso); }
+.detalle-galeria > img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.detalle-galeria-info { position: absolute; inset: auto 0 0; display: grid; gap: 6px; padding: 55px 25px 22px; color: var(--blanco); background: linear-gradient(transparent, #1d1110c9); }
+.detalle-galeria-info span { color: #f1d696; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.detalle-galeria-info strong { font: 500 25px 'Playfair Display', serif; }
+.detalle-galeria-info small { font-size: 11px; }
+.detalle-pestanas { display: flex; gap: 30px; margin-top: 28px; border-bottom: 1px solid #ded4c8; }
+.detalle-pestanas button { padding: 0 2px 13px; border: 0; border-bottom: 2px solid transparent; color: var(--gris); background: transparent; font-size: 13px; }
+.detalle-pestanas button.activa { border-color: var(--vino); color: var(--vino); font-weight: 700; }
+.detalle-pestana-contenido { min-height: 220px; padding: 26px 0; color: var(--gris); font-size: 13px; line-height: 1.75; }
+.detalle-pestana-contenido h2, .detalle-reserva h2 { margin-bottom: 12px; color: var(--vino-profundo); font-size: 27px; }
+.detalle-pestana-contenido > a, .detalle-reserva > a { color: var(--vino); font-size: 12px; }
+.detalle-datos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 24px 0; }
+.detalle-datos div { padding: 13px; background: var(--blanco); }
+.detalle-datos dt { color: var(--gris); font-size: 10px; }
+.detalle-datos dd { margin: 5px 0 0; color: var(--tinta); font-size: 12px; }
+.detalle-resumen-resenas { display: flex; align-items: center; gap: 12px; color: var(--gris); }
+.detalle-resumen-resenas strong { color: #9b752d; font-size: 22px; }
+.formulario-resena { margin: 24px 0 30px; padding: 22px; background: var(--blanco); }
+.formulario-resena h3 { margin-bottom: 8px; color: var(--vino-profundo); font: 600 20px 'Playfair Display', serif; }
+.resena-identidad { margin-bottom: 16px; color: var(--gris); font-size: 11px; }
+.resena-identidad strong { color: var(--tinta); }
+.formulario-resena fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.formulario-resena fieldset:disabled { opacity: .6; }
+.formulario-resena legend, .formulario-resena label { display: block; margin-bottom: 8px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.selector-estrellas { display: flex; gap: 4px; margin-bottom: 17px; }
+.selector-estrellas button { padding: 0 2px; border: 0; color: #d6cec3; background: transparent; font-size: 28px; line-height: 1.2; }
+.selector-estrellas button.seleccionada { color: #bd8f35; }
+.formulario-resena label textarea { width: 100%; margin-top: 7px; padding: 11px; border: 1px solid #ded5ca; color: var(--tinta); background: var(--crema); font: 12px/1.6 'DM Sans', sans-serif; resize: vertical; }
+.formulario-resena fieldset > .boton { margin-top: 14px; }
+.resena-invitacion { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 17px; }
+.resena-invitacion p { margin: 0; color: var(--gris); font-size: 11px; }
+.resena-invitacion .boton { padding: 9px 12px; font-size: 11px; }
+.mensaje-resena { margin: 14px 0 0; padding: 10px; color: var(--vino); background: #f5ebdc; font-size: 11px; line-height: 1.5; }
+.lista-resenas { display: grid; gap: 16px; }
+.lista-resenas > p { color: var(--gris); font-size: 12px; }
+.resena-publicada { padding: 17px 0; border-top: 1px solid #e5dcd1; }
+.resena-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--vino-profundo); font-size: 12px; }
+.resena-encabezado > span { color: #bd8f35; font-size: 14px; letter-spacing: 1px; white-space: nowrap; }
+.resena-encabezado .estrellas-vacias { color: #d6cec3; }
+.resena-publicada p { margin: 10px 0 6px; color: var(--tinta); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.resena-publicada small { color: var(--gris); font-size: 10px; }
+.detalle-reserva { position: sticky; top: 25px; padding: 25px; border: 1px solid #e4dbd0; background: var(--blanco); box-shadow: 0 12px 30px #3a25120b; }
+.detalle-reserva h2 { font-size: 25px; }
+.detalle-reserva > p { margin-bottom: 22px; color: var(--gris); font-size: 12px; line-height: 1.6; }
+.detalle-reserva-formulario { display: grid; gap: 13px; }
+.detalle-reserva-formulario label { display: grid; gap: 6px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.detalle-reserva-formulario input, .detalle-reserva-formulario select { width: 100%; min-width: 0; padding: 11px 10px; border: 1px solid #ded5ca; color: var(--tinta); background: var(--crema); font-size: 12px; }
+.detalle-reserva-formulario .boton { margin-top: 5px; }
+.detalle-reserva .boton { width: 100%; }
+.detalle-reserva > small { display: block; margin: 13px 0 17px; color: var(--gris); font-size: 10px; text-align: center; }
+.detalle-reserva > a { display: block; text-align: center; }
+@media (max-width: 900px) {
+  .detalle-restaurante { padding-right: 6vw; padding-left: 6vw; }
+  .detalle-columnas { grid-template-columns: minmax(0, 1fr) 270px; gap: 22px; }
+  .detalle-galeria { height: 320px; }
+}
+@media (max-width: 620px) {
+  .detalle-restaurante { padding: 28px 7vw 60px; }
+  .detalle-migas { margin-bottom: 22px; }
+  .detalle-columnas { grid-template-columns: 1fr; }
+  .detalle-titulo h1 { font-size: 38px; }
+  .detalle-galeria { height: 250px; }
+  .detalle-galeria-info strong { font-size: 21px; }
+  .detalle-pestanas { justify-content: space-between; gap: 12px; }
+  .detalle-datos { grid-template-columns: 1fr; gap: 8px; }
+  .detalle-reserva { position: static; }
+}

@@ -3,7 +3,7 @@ import type { Restaurante } from "../tipos/restaurantes";
 export const restaurantes: Restaurante [] = [
     {
         id: 1,
-        nombre: "Osaka Bogotá",
+        nombre: "Osaka Nikkei",
         categoria: "Cocina Nikkei",
         locacion: "Zona T",
         rangoprecios: "$$$$",
