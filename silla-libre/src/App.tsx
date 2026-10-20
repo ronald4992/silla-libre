@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
@@ -401,6 +401,8 @@ function DetalleRestaurante({
     ? resenas.reduce((total, resena) => total + resena.calificacion, 0) /
       resenas.length
     : restaurante.rating;
+  const consultaUbicacion = `${restaurante.nombre}, ${restaurante.locacion}, Bogotá, Colombia`;
+  const ubicacionGoogleMaps = encodeURIComponent(consultaUbicacion);
   return (
     <section className="detalle-restaurante">
       <div className="detalle-migas">
@@ -587,82 +589,102 @@ function DetalleRestaurante({
             )}
           </div>
         </div>
-        <aside className="detalle-reserva">
-          <h2>Reserva una mesa</h2>
-          <p>Encuentra el momento ideal para visitar {restaurante.nombre}.</p>
-          <form
-            className="detalle-reserva-formulario"
-            onSubmit={(evento) => {
-              evento.preventDefault();
-              reservar(seleccionReserva);
-            }}
-          >
-            <label>
-              Fecha
-              <input
-                type="date"
-                value={seleccionReserva.fecha}
-                onChange={(evento) =>
-                  setSeleccionReserva({
-                    ...seleccionReserva,
-                    fecha: evento.target.value,
-                  })
-                }
-                required
-              />
-            </label>
-            <label>
-              Hora
-              <input
-                type="time"
-                value={seleccionReserva.hora}
-                min={
-                  restaurante.id === 1
-                    ? "12:30"
-                    : restaurante.id === 2
-                      ? "12:00"
+        <aside className="detalle-lateral">
+          <section className="detalle-reserva">
+            <h2>Reserva una mesa</h2>
+            <p>Encuentra el momento ideal para visitar {restaurante.nombre}.</p>
+            <form
+              className="detalle-reserva-formulario"
+              onSubmit={(evento) => {
+                evento.preventDefault();
+                reservar(seleccionReserva);
+              }}
+            >
+              <label>
+                Fecha
+                <input
+                  type="date"
+                  value={seleccionReserva.fecha}
+                  onChange={(evento) =>
+                    setSeleccionReserva({
+                      ...seleccionReserva,
+                      fecha: evento.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Hora
+                <input
+                  type="time"
+                  value={seleccionReserva.hora}
+                  min={
+                    restaurante.id === 1
+                      ? "12:30"
+                      : restaurante.id === 2
+                        ? "12:00"
+                        : undefined
+                  }
+                  max={
+                    restaurante.id === 1 || restaurante.id === 2
+                      ? "23:00"
                       : undefined
-                }
-                max={
-                  restaurante.id === 1 || restaurante.id === 2
-                    ? "23:00"
-                    : undefined
-                }
-                onChange={(evento) =>
-                  setSeleccionReserva({
-                    ...seleccionReserva,
-                    hora: evento.target.value,
-                  })
-                }
-                required
-              />
-            </label>
-            <label>
-              Número de personas
-              <select
-                value={seleccionReserva.personas}
-                onChange={(evento) =>
-                  setSeleccionReserva({
-                    ...seleccionReserva,
-                    personas: evento.target.value,
-                  })
-                }
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((numero) => (
-                  <option key={numero} value={numero}>
-                    {numero} {numero === 1 ? "persona" : "personas"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="boton boton-vino" type="submit">
-              Elegir fecha y hora <span>↗</span>
-            </button>
-          </form>
-          <small>La reserva se confirma en el siguiente paso.</small>
-          <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
-            Más información en el sitio oficial
-          </a>
+                  }
+                  onChange={(evento) =>
+                    setSeleccionReserva({
+                      ...seleccionReserva,
+                      hora: evento.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Número de personas
+                <select
+                  value={seleccionReserva.personas}
+                  onChange={(evento) =>
+                    setSeleccionReserva({
+                      ...seleccionReserva,
+                      personas: evento.target.value,
+                    })
+                  }
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((numero) => (
+                    <option key={numero} value={numero}>
+                      {numero} {numero === 1 ? "persona" : "personas"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="boton boton-vino" type="submit">
+                Elegir fecha y hora <span>↗</span>
+              </button>
+            </form>
+            <small>La reserva se confirma en el siguiente paso.</small>
+            <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
+              Más información en el sitio oficial
+            </a>
+          </section>
+          <section className="detalle-ubicacion" aria-labelledby="titulo-ubicacion">
+            <h2 id="titulo-ubicacion">Ubicación</h2>
+            <p>{restaurante.locacion}, Bogotá</p>
+            <iframe
+              title={`Ubicación de ${restaurante.nombre} en Google Maps`}
+              src={`https://www.google.com/maps?q=${ubicacionGoogleMaps}&output=embed`}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${ubicacionGoogleMaps}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ver en Google Maps ↗
+            </a>
+          </section>
         </aside>
       </div>
     </section>
@@ -2769,27 +2791,6 @@ function App() {
             ))}
           </div>
         </section>
-        <section className="mapa-seccion">
-          <div>
-            <p className="sobretitulo oscuro">CERCA DE TI</p>
-            <h2>
-              La ciudad también
-              <br />
-              <em>se saborea.</em>
-            </h2>
-            <p className="texto-seccion">
-              Encuentra tu próxima mesa, descubre nuevas zonas y deja que Bogotá
-              te sorprenda.
-            </p>
-            <button
-              className="boton boton-vino"
-              onClick={() => abrirReserva(restaurantes[0])}
-            >
-              Ver restaurantes cercanos ↗
-            </button>
-          </div>
-          <Mapa />
-        </section>
         <section className="cta-restaurante">
           <div>
             <p className="sobretitulo">PARA QUIENES HACEN LA EXPERIENCIA</p>
@@ -2927,6 +2928,11 @@ function App() {
       <footer>
         <span className="marca-footer">Silla Libre</span>
         <span>Hecho para comer bien y vivir mejor.</span>
+        <div className="contacto-footer">
+          <strong>Contáctenos</strong>
+          <a href="mailto:essillalibre@gmail.com">essillalibre@gmail.com</a>
+        </div>
+        <span>Esta aplicación fue creada por Ronald Lopez y Andres Castillo.</span>
         <span>© 2026 Silla Libre</span>
       </footer>
       {modal && (
@@ -3258,72 +3264,4 @@ function FormularioRestaurante({
   );
 }
 
-function Mapa() {
-  const referenciaMapa = useRef<HTMLDivElement>(null);
-  const [mensajeMapa, setMensajeMapa] = useState(
-    import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-      ? "Cargando Google Maps..."
-      : "Configura VITE_GOOGLE_MAPS_API_KEY para activar el mapa",
-  );
-  useEffect(() => {
-    const clave = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!clave || !referenciaMapa.current) return;
-    const mostrarMapa = () => {
-      if (!window.google || !referenciaMapa.current) {
-        setMensajeMapa("No se pudo inicializar Google Maps. Verifica la clave y sus permisos.");
-        return;
-      }
-      const mapa = new window.google.maps.Map(referenciaMapa.current, {
-        center: { lat: 4.667, lng: -74.056 },
-        zoom: 13,
-        disableDefaultUI: true,
-      });
-      new window.google.maps.Marker({
-        position: { lat: 4.667, lng: -74.056 },
-        map: mapa,
-        title: "Restaurantes Silla Libre",
-      });
-    };
-    if (window.google) mostrarMapa();
-    else {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${clave}`;
-      script.async = true;
-    script.onload = () => {
-      if (window.google) mostrarMapa();
-      else {
-        setMensajeMapa("No se pudo inicializar Google Maps. Verifica la clave y sus permisos.");
-      }
-    };
-    script.onerror = () => {
-      setMensajeMapa("No se pudo cargar Google Maps. Verifica la conexión, facturación y restricciones de la clave.");
-    };
-    document.head.appendChild(script);
-    }
-  }, []);
-  return (
-    <div className="mapa">
-      <div ref={referenciaMapa} className="mapa-interactivo" />
-      <div className="mapa-fallback">
-        <span>⌖</span>
-        <strong>Zona T · Chapinero · Chicó</strong>
-        <small>{mensajeMapa}</small>
-      </div>
-    </div>
-  );
-}
-
-declare global {
-  interface Window {
-    google?: {
-      maps: {
-        Map: new (
-          elemento: HTMLElement,
-          opciones: Record<string, unknown>,
-        ) => unknown;
-        Marker: new (opciones: Record<string, unknown>) => unknown;
-      };
-    };
-  }
-}
 export default App;
