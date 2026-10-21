@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
   GoogleAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -13,17 +18,23 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
+  onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import {
+  deleteObject,
   getDownloadURL,
+  listAll,
   ref,
   uploadBytesResumable,
   type StorageReference,
@@ -59,6 +70,20 @@ interface RestaurantePropietario {
   menu: PlatoMenu[];
   menuPdfUrl: string;
   menuPdfNombre: string;
+  mesasPorTurno: number;
+  diasNoDisponibles: number[];
+  fechasNoDisponibles: string[];
+}
+interface RestauranteReservable extends Restaurante {
+  propietario: string;
+  mesasPorTurno: number;
+  diasNoDisponibles: number[];
+  fechasNoDisponibles: string[];
+}
+interface ConfiguracionDisponibilidad {
+  mesasPorTurno: number;
+  diasNoDisponibles: number[];
+  fechasNoDisponibles: string[];
 }
 function FormularioPerfil({
   usuario,
@@ -214,8 +239,8 @@ function ReservasUsuario({
   return (
     <section className="reservas-usuario">
       <div className="titulo-estadistica">
-        <span>Mis reservas</span>
-        <small>Consulta los detalles de tus próximas visitas</small>
+        <span>Historial de reservas</span>
+        <small>Consulta tus reservas pasadas y próximas</small>
       </div>
       {cargando ? (
         <p className="aviso">Cargando tus reservas...</p>
@@ -257,6 +282,10 @@ function ReservasUsuario({
                   {reserva.personas}{" "}
                   {reserva.personas === 1 ? "persona" : "personas"}
                 </strong>
+              </div>
+              <div>
+                <span>Estado</span>
+                <strong>{reserva.estado ?? "Confirmada"}</strong>
               </div>
             </article>
           ))}
@@ -476,9 +505,11 @@ function DetalleRestaurante({
                   <div><dt>Ubicación</dt><dd>{restaurante.locacion}, Bogotá</dd></div>
                   <div><dt>Precio</dt><dd>{restaurante.rangoprecios}</dd></div>
                 </dl>
-                <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
-                  Visitar sitio oficial ↗
-                </a>
+                {restaurante.urlreserva && (
+                  <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
+                    Visitar sitio oficial ↗
+                  </a>
+                )}
               </>
             )}
             {pestaña === "menu" && (
@@ -620,6 +651,7 @@ function DetalleRestaurante({
                 Hora
                 <input
                   type="time"
+                  step={3600}
                   value={seleccionReserva.hora}
                   min={
                     restaurante.id === 1
@@ -665,9 +697,11 @@ function DetalleRestaurante({
               </button>
             </form>
             <small>La reserva se confirma en el siguiente paso.</small>
-            <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
-              Más información en el sitio oficial
-            </a>
+            {restaurante.urlreserva && (
+              <a href={restaurante.urlreserva} target="_blank" rel="noreferrer">
+                Más información en el sitio oficial
+              </a>
+            )}
           </section>
           <section className="detalle-ubicacion" aria-labelledby="titulo-ubicacion">
             <h2 id="titulo-ubicacion">Ubicación</h2>
@@ -695,7 +729,7 @@ function DetalleRestaurante({
 
 interface ResenaRestaurante {
   id: string;
-  restauranteId: number;
+  restauranteId: number | string;
   usuarioId: string;
   autor: string;
   calificacion: number;
@@ -708,7 +742,8 @@ function normalizarResena(
   datos: Record<string, unknown>,
 ): ResenaRestaurante | null {
   if (
-    typeof datos.restauranteId !== "number" ||
+    (typeof datos.restauranteId !== "number" &&
+      typeof datos.restauranteId !== "string") ||
     typeof datos.usuarioId !== "string" ||
     typeof datos.calificacion !== "number" ||
     datos.calificacion < 1 ||
@@ -737,7 +772,9 @@ function normalizarResena(
   };
 }
 
-function leerResenasLocales(restauranteId: number): ResenaRestaurante[] {
+function leerResenasLocales(
+  restauranteId: number | string,
+): ResenaRestaurante[] {
   try {
     const guardado = localStorage.getItem(
       `silla-libre-resenas-${restauranteId}`,
@@ -769,6 +806,134 @@ function leerResenasLocales(restauranteId: number): ResenaRestaurante[] {
   }
 }
 
+function GestionDisponibilidadRestaurante({
+  restaurante,
+  guardar,
+  cargando,
+}: {
+  restaurante: RestaurantePropietario;
+  guardar: (id: string, datos: ConfiguracionDisponibilidad) => void;
+  cargando: boolean;
+}) {
+  const [mesasPorTurno, setMesasPorTurno] = useState(restaurante.mesasPorTurno);
+  const [diasNoDisponibles, setDiasNoDisponibles] = useState(
+    restaurante.diasNoDisponibles,
+  );
+  const [fechasNoDisponibles, setFechasNoDisponibles] = useState(
+    restaurante.fechasNoDisponibles,
+  );
+  const [nuevaFecha, setNuevaFecha] = useState("");
+  const dias = [
+    ["Lunes", 1],
+    ["Martes", 2],
+    ["Miércoles", 3],
+    ["Jueves", 4],
+    ["Viernes", 5],
+    ["Sábado", 6],
+    ["Domingo", 0],
+  ] as const;
+  return (
+    <div className="disponibilidad-admin">
+      <div className="titulo-estadistica">
+        <span>Disponibilidad de mesas</span>
+        <small>Los cambios se aplican en tiempo real a los turnos de una hora.</small>
+      </div>
+      <label className="mesas-disponibles">
+        Mesas por turno
+        <input
+          type="number"
+          min="0"
+          max="500"
+          value={mesasPorTurno}
+          onChange={(evento) => setMesasPorTurno(Number(evento.target.value))}
+        />
+      </label>
+      <fieldset className="dias-cerrados">
+        <legend>Días de la semana no disponibles</legend>
+        {dias.map(([nombre, indice]) => (
+          <label key={indice}>
+            <input
+              type="checkbox"
+              checked={diasNoDisponibles.includes(indice)}
+              onChange={() =>
+                setDiasNoDisponibles((actuales) =>
+                  actuales.includes(indice)
+                    ? actuales.filter((dia) => dia !== indice)
+                    : [...actuales, indice],
+                )
+              }
+            />
+            {nombre}
+          </label>
+        ))}
+      </fieldset>
+      <div className="fechas-cerradas">
+        <label>
+          Fecha específica no disponible
+          <input
+            type="date"
+            value={nuevaFecha}
+            onChange={(evento) => setNuevaFecha(evento.target.value)}
+          />
+        </label>
+        <button
+          className="boton boton-vino"
+          type="button"
+          disabled={!nuevaFecha || fechasNoDisponibles.includes(nuevaFecha)}
+          onClick={() => {
+            setFechasNoDisponibles((actuales) =>
+              [...new Set([...actuales, nuevaFecha])].sort(),
+            );
+            setNuevaFecha("");
+          }}
+        >
+          Añadir fecha
+        </button>
+      </div>
+      {fechasNoDisponibles.length > 0 && (
+        <ul className="lista-fechas-cerradas">
+          {fechasNoDisponibles.map((fecha) => (
+            <li key={fecha}>
+              {new Date(`${fecha}T12:00:00`).toLocaleDateString("es-CO")}
+              <button
+                className="quitar-favorito"
+                type="button"
+                onClick={() =>
+                  setFechasNoDisponibles((actuales) =>
+                    actuales.filter((actual) => actual !== fecha),
+                  )
+                }
+                aria-label={`Quitar cierre del ${fecha}`}
+              >
+                Quitar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        className="boton boton-vino"
+        type="button"
+        disabled={
+          cargando ||
+          !Number.isInteger(mesasPorTurno) ||
+          mesasPorTurno < 0 ||
+          mesasPorTurno > 500
+        }
+        onClick={() =>
+          guardar(restaurante.id, {
+            mesasPorTurno,
+            diasNoDisponibles,
+            fechasNoDisponibles,
+          })
+        }
+      >
+        {cargando ? "Guardando..." : "Guardar disponibilidad"}
+      </button>
+    </div>
+  );
+}
+
 function PanelRestaurante({
   foto,
   cambiarFoto,
@@ -785,6 +950,7 @@ function PanelRestaurante({
   subirMenuArchivo,
   progresoMenu,
   cancelarReserva,
+  guardarDisponibilidad,
   cargando,
 }: {
   foto: string;
@@ -806,6 +972,10 @@ function PanelRestaurante({
   subirMenuArchivo: (restauranteId: string, archivo: File) => void;
   progresoMenu: Record<string, number>;
   cancelarReserva: (reserva: ReservaPerfil) => void;
+  guardarDisponibilidad: (
+    id: string,
+    datos: ConfiguracionDisponibilidad,
+  ) => void;
   cargando: boolean;
 }) {
   const reservasActivas = reservas.filter(
@@ -912,6 +1082,12 @@ function PanelRestaurante({
               {restaurante.menuPdfUrl ? "Menú cargado" : `${restaurante.menu.length} platos`}
             </span>
           </div>
+          <GestionDisponibilidadRestaurante
+            key={`${restaurante.id}-${restaurante.mesasPorTurno}-${restaurante.diasNoDisponibles.join(",")}-${restaurante.fechasNoDisponibles.join(",")}`}
+            restaurante={restaurante}
+            guardar={guardarDisponibilidad}
+            cargando={cargando}
+          />
           <div className="menu-admin">
             <div className="titulo-estadistica">
               <span>Subir menú</span>
@@ -1169,6 +1345,8 @@ interface FormularioRestaurante {
 interface ReservaPerfil extends DatosReserva {
   id?: string;
   estado?: string;
+  restauranteId?: string;
+  turnoId?: string;
 }
 type VistaPagina =
   | "inicio"
@@ -1214,6 +1392,13 @@ function subirArchivoConLimite(
       },
     );
   });
+}
+async function eliminarArchivosDeCarpeta(referencia: StorageReference): Promise<void> {
+  const contenido = await listAll(referencia);
+  await Promise.all([
+    ...contenido.items.map((archivo) => deleteObject(archivo)),
+    ...contenido.prefixes.map((carpeta) => eliminarArchivosDeCarpeta(carpeta)),
+  ]);
 }
 function esperarConLimite<T>(
   operacion: Promise<T>,
@@ -1306,6 +1491,13 @@ function mensajeErrorAcceso(error: unknown): string {
       return "Ya existe una cuenta con ese correo. Inicia sesión o usa otro correo.";
     case "auth/invalid-email":
       return "El correo electrónico no tiene un formato válido.";
+    case "auth/user-not-found":
+      return "No encontramos una cuenta con ese correo. Verifica la dirección e inténtalo de nuevo.";
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "La contraseña actual no es correcta.";
+    case "auth/requires-recent-login":
+      return "Por seguridad, vuelve a iniciar sesión antes de realizar esta acción.";
     case "auth/weak-password":
       return "La contraseña debe tener al menos 6 caracteres.";
     case "auth/operation-not-allowed":
@@ -1364,6 +1556,25 @@ function leerPerfilGuardado(uid?: string): PerfilGuardado {
     return {};
   }
 }
+function leerFavoritosGuardados(uid?: string): Array<number | string> {
+  try {
+    const clave = uid ? `silla-libre-favoritos-${uid}` : "silla-libre-favoritos";
+    const guardados = localStorage.getItem(clave);
+    if (!guardados) return [];
+    const datos: unknown = JSON.parse(guardados);
+    return Array.isArray(datos)
+      ? [...new Set(
+          datos.filter(
+            (id): id is number | string =>
+              (typeof id === "number" && Number.isInteger(id)) ||
+              (typeof id === "string" && id.length > 0),
+          ),
+        )]
+      : [];
+  } catch {
+    return [];
+  }
+}
 function separarNombreCompleto(nombre: string): { nombre: string; apellido: string } {
   const partes = nombre.trim().split(/\s+/);
   return {
@@ -1395,6 +1606,24 @@ function leerReservasGuardadas(uid: string | null, correo?: string): ReservaPerf
     return [];
   }
 }
+function combinarReservas(
+  ...grupos: ReservaPerfil[][]
+): ReservaPerfil[] {
+  const porClave = new Map<string, ReservaPerfil>();
+  for (const grupo of grupos) {
+    for (const reserva of grupo) {
+      const clave =
+        reserva.id ??
+        `${reserva.restaurante}|${reserva.fecha}|${reserva.hora}|${reserva.correo}`;
+      porClave.set(clave, { ...porClave.get(clave), ...reserva });
+    }
+  }
+  return [...porClave.values()].sort(
+    (a, b) =>
+      new Date(`${b.fecha}T${b.hora}`).getTime() -
+      new Date(`${a.fecha}T${a.hora}`).getTime(),
+  );
+}
 function normalizarReserva(
   id: string,
   datos: Record<string, unknown>,
@@ -1416,6 +1645,9 @@ function normalizarReserva(
     personas: datos.personas,
     correo: datos.correo,
     estado: typeof datos.estado === "string" ? datos.estado : "Confirmada",
+    restauranteId:
+      typeof datos.restauranteId === "string" ? datos.restauranteId : undefined,
+    turnoId: typeof datos.turnoId === "string" ? datos.turnoId : undefined,
   };
 }
 function leerVistaPagina(): VistaPagina {
@@ -1427,10 +1659,15 @@ function leerVistaPagina(): VistaPagina {
   return "inicio";
 }
 function leerRestauranteDetalleRuta(): Restaurante | null {
-  const coincidencia = window.location.pathname.match(/^\/restaurante\/(\d+)\/?$/);
+  const coincidencia = window.location.pathname.match(/^\/restaurante\/([^/]+)\/?$/);
   if (!coincidencia) return null;
-  const id = Number(coincidencia[1]);
-  return restaurantes.find((restaurante) => restaurante.id === id) ?? null;
+  let id: string;
+  try {
+    id = decodeURIComponent(coincidencia[1]);
+  } catch {
+    return null;
+  }
+  return [...restaurantes].find((restaurante) => String(restaurante.id) === id) ?? null;
 }
 function normalizarRestaurante(
   id: string,
@@ -1458,6 +1695,52 @@ function normalizarRestaurante(
     menuPdfUrl: typeof datos.menuPdfUrl === "string" ? datos.menuPdfUrl : "",
     menuPdfNombre:
       typeof datos.menuPdfNombre === "string" ? datos.menuPdfNombre : "",
+    mesasPorTurno:
+      typeof datos.mesasPorTurno === "number" &&
+      Number.isInteger(datos.mesasPorTurno) &&
+      datos.mesasPorTurno >= 0
+        ? datos.mesasPorTurno
+        : 10,
+    diasNoDisponibles: Array.isArray(datos.diasNoDisponibles)
+      ? datos.diasNoDisponibles.filter(
+          (dia): dia is number =>
+            typeof dia === "number" && Number.isInteger(dia) && dia >= 0 && dia <= 6,
+        )
+      : [],
+    fechasNoDisponibles: Array.isArray(datos.fechasNoDisponibles)
+      ? datos.fechasNoDisponibles.filter(
+          (fecha): fecha is string => typeof fecha === "string",
+        )
+      : [],
+  };
+}
+function normalizarRestaurantePublico(
+  id: string,
+  datos: Record<string, unknown>,
+): RestauranteReservable | null {
+  if (
+    typeof datos.nombre !== "string" ||
+    typeof datos.comida !== "string" ||
+    typeof datos.propietario !== "string"
+  ) {
+    return null;
+  }
+  const propietario = datos.propietario;
+  const negocio = normalizarRestaurante(id, datos);
+  return {
+    id,
+    nombre: negocio.nombre,
+    categoria: negocio.comida,
+    locacion: negocio.direccion,
+    rangoprecios: "$$",
+    rating: 0,
+    imagen: "/logo.png",
+    descripcion: `${negocio.comida} · ${negocio.direccion}`,
+    urlreserva: "",
+    propietario,
+    mesasPorTurno: negocio.mesasPorTurno,
+    diasNoDisponibles: negocio.diasNoDisponibles,
+    fechasNoDisponibles: negocio.fechasNoDisponibles,
   };
 }
 function leerRestaurantesLocales(uid: string): RestaurantePropietario[] {
@@ -1520,11 +1803,24 @@ function App() {
   const [restauranteActivo, setRestauranteActivo] = useState(restaurantes[0]);
   const [busqueda, setBusqueda] = useState("");
   const [categoria, setCategoria] = useState("Todas");
-  const [favoritos, setFavoritos] = useState<number[]>([]);
+  const [favoritos, setFavoritos] = useState<Array<number | string>>([]);
+  const [restaurantesPublicos, setRestaurantesPublicos] = useState<
+    RestauranteReservable[]
+  >([]);
+  const [disponibilidadActiva, setDisponibilidadActiva] =
+    useState<RestauranteReservable | null>(null);
+  const [mesasOcupadasTurno, setMesasOcupadasTurno] = useState(0);
+  const [turnoSuscritoId, setTurnoSuscritoId] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [confirmandoEliminacion, setConfirmandoEliminacion] = useState(false);
+  const [contraseñaEliminacion, setContraseñaEliminacion] = useState("");
   const [formularioRestaurante, setFormularioRestaurante] =
     useState(restauranteInicial);
+  const restaurantesVisibles = useMemo(
+    () => [...restaurantes, ...restaurantesPublicos],
+    [restaurantesPublicos],
+  );
 
   useEffect(() => {
     const sincronizarRuta = () => {
@@ -1539,6 +1835,11 @@ function App() {
       autenticacion,
       (usuarioAutenticado) => {
         setUsuario(usuarioAutenticado);
+        setFavoritos(
+          usuarioAutenticado
+            ? leerFavoritosGuardados(usuarioAutenticado.uid)
+            : leerFavoritosGuardados(),
+        );
         setAutenticacionCargando(false);
         setPerfilCargando(Boolean(usuarioAutenticado));
         const perfil = leerPerfilGuardado(usuarioAutenticado?.uid);
@@ -1593,6 +1894,59 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    if (!baseDatos) return;
+    const cancelar = onSnapshot(
+      collection(baseDatos, "restaurantesPublicos"),
+      (resultado) => {
+        const cargados = resultado.docs.flatMap((documento) => {
+          const restaurante = normalizarRestaurantePublico(
+            documento.id,
+            documento.data(),
+          );
+          return restaurante ? [restaurante] : [];
+        });
+        setRestaurantesPublicos(cargados);
+        setRestaurantesPropietario((actuales) =>
+          actuales.map((restaurante) => {
+            const publico = cargados.find((elemento) => elemento.id === restaurante.id);
+            return publico
+              ? {
+                  ...restaurante,
+                  mesasPorTurno: publico.mesasPorTurno,
+                  diasNoDisponibles: publico.diasNoDisponibles,
+                  fechasNoDisponibles: publico.fechasNoDisponibles,
+                }
+              : restaurante;
+          }),
+        );
+        const coincidencia = window.location.pathname.match(
+          /^\/restaurante\/([^/]+)\/?$/,
+        );
+        if (coincidencia) {
+          let idRuta = "";
+          try {
+            idRuta = decodeURIComponent(coincidencia[1]);
+          } catch {
+            return;
+          }
+          const restauranteRuta = cargados.find(
+            (restaurante) => restaurante.id === idRuta,
+          );
+          if (restauranteRuta) {
+            setRestauranteDetalle(restauranteRuta);
+            setVista("detalle-restaurante");
+          }
+        }
+      },
+      () => {
+        setMensaje(
+          "No pudimos cargar la lista de restaurantes administrados. Revisa las reglas de lectura pública de Firebase.",
+        );
+      },
+    );
+    return cancelar;
+  }, []);
+  useEffect(() => {
     if (!usuario) return;
     let vigente = true;
     const cargarPerfil = async () => {
@@ -1618,6 +1972,41 @@ function App() {
         const datosPerfil = perfil.exists() ? perfil.data() : undefined;
         const perfilLocal = leerPerfilGuardado(usuario.uid);
         const negociosLocales = leerRestaurantesLocales(usuario.uid);
+        const favoritosRemotos = Array.isArray(datosPerfil?.favoritos)
+          ? datosPerfil.favoritos.filter(
+              (id: unknown): id is number | string =>
+                (typeof id === "number" && Number.isInteger(id)) ||
+                (typeof id === "string" && id.length > 0),
+            )
+          : null;
+        const favoritosLocales = leerFavoritosGuardados(usuario.uid);
+        const favoritosAnonimos = leerFavoritosGuardados();
+        const favoritosActuales = [
+          ...new Set(favoritosRemotos ?? [...favoritosLocales, ...favoritosAnonimos]),
+        ];
+        setFavoritos(favoritosActuales);
+        localStorage.setItem(
+          `silla-libre-favoritos-${usuario.uid}`,
+          JSON.stringify(favoritosActuales),
+        );
+        localStorage.removeItem("silla-libre-favoritos");
+        if (
+          baseDatos &&
+          (favoritosRemotos === null ||
+            favoritosAnonimos.some((id) => !favoritosRemotos.includes(id)))
+        ) {
+          void setDoc(
+            doc(baseDatos, "perfiles", usuario.uid),
+            { favoritos: favoritosActuales },
+            { merge: true },
+          ).catch(() => {
+            if (vigente) {
+              setMensaje(
+                "Tus favoritos se conservaron en este dispositivo, pero no pudieron sincronizarse con Firebase.",
+              );
+            }
+          });
+        }
         const tipoPerfil: TipoCuenta =
           window.location.pathname === "/perfil/restaurante" ||
             negocios.size > 0 ||
@@ -1689,6 +2078,25 @@ function App() {
         const restaurantesRemotos = negocios.docs.map((negocio) =>
           normalizarRestaurante(negocio.id, negocio.data()),
         );
+        if (restaurantesRemotos.length > 0) {
+          const db = baseDatos;
+          const lotePublico = writeBatch(db);
+          restaurantesRemotos.forEach((restaurante) => {
+            lotePublico.set(
+              doc(db, "restaurantesPublicos", restaurante.id),
+              {
+                nombre: restaurante.nombre,
+                direccion: restaurante.direccion,
+                comida: restaurante.comida,
+                propietario: usuario.uid,
+                mesasPorTurno: restaurante.mesasPorTurno,
+                diasNoDisponibles: restaurante.diasNoDisponibles,
+                fechasNoDisponibles: restaurante.fechasNoDisponibles,
+              },
+            );
+          });
+          await lotePublico.commit();
+        }
         const restaurantesPorId = new Map(
           negociosLocales.map((restaurante) => [restaurante.id, restaurante]),
         );
@@ -1696,16 +2104,20 @@ function App() {
           restaurantesPorId.set(restaurante.id, restaurante),
         );
         setRestaurantesPropietario([...restaurantesPorId.values()]);
-        setReservasPerfil(
-          [
-            ...new Map(
-              [...reservasUsuario.docs, ...reservasRestaurantes.flatMap((grupo) => grupo.docs)]
-                .map((reserva) => [reserva.id, reserva] as const),
-            ).values(),
-          ].flatMap((reserva) => {
+        const reservasRemotas = [
+          ...new Map(
+            [...reservasUsuario.docs, ...reservasRestaurantes.flatMap((grupo) => grupo.docs)]
+              .map((reserva) => [reserva.id, reserva] as const),
+          ).values(),
+        ].flatMap((reserva) => {
             const datos = normalizarReserva(reserva.id, reserva.data());
             return datos ? [datos] : [];
-          }),
+        });
+        setReservasPerfil(
+          combinarReservas(
+            reservasRemotas,
+            leerReservasGuardadas(usuario.uid),
+          ),
         );
       } else {
         const restaurantesLocales = leerRestaurantesLocales(usuario.uid);
@@ -1736,9 +2148,11 @@ function App() {
           restaurantesLocales.map((restaurante) => restaurante.nombre),
         );
         setReservasPerfil(
-          leerReservasGuardadas(null).filter((reserva) =>
-            nombresRestaurantes.has(reserva.restaurante),
-          ),
+          tipoLocal === "restaurante"
+            ? leerReservasGuardadas(usuario.uid).filter((reserva) =>
+                nombresRestaurantes.has(reserva.restaurante),
+              )
+            : leerReservasGuardadas(usuario.uid),
         );
       }
       if (vigente) setReservasCargando(false);
@@ -1757,17 +2171,79 @@ function App() {
       vigente = false;
     };
   }, [usuario]);
+  useEffect(() => {
+    if (modal !== "reserva" || !baseDatos) {
+      return;
+    }
+    const restaurantId = String(restauranteActivo.id);
+    const negocio = restaurantesPublicos.find(
+      (restaurante) => restaurante.id === restaurantId,
+    );
+    if (!negocio) {
+      return;
+    }
+    const cancelar = onSnapshot(
+      doc(baseDatos, "restaurantesPublicos", restaurantId),
+      (resultado) => {
+        if (!resultado.exists()) {
+          setDisponibilidadActiva(null);
+          return;
+        }
+        setDisponibilidadActiva(
+          normalizarRestaurantePublico(resultado.id, resultado.data()),
+        );
+      },
+      () => {
+        setMensaje(
+          "No pudimos consultar la disponibilidad en tiempo real. Inténtalo de nuevo.",
+        );
+      },
+    );
+    return cancelar;
+  }, [modal, restauranteActivo.id, restaurantesPublicos]);
+  const turnoSeleccionadoId =
+    disponibilidadActiva && reserva.fecha && reserva.hora
+      ? `${disponibilidadActiva.id}_${reserva.fecha}_${reserva.hora.slice(0, 2)}`
+      : null;
+  useEffect(() => {
+    if (!baseDatos || !turnoSeleccionadoId || modal !== "reserva") {
+      return;
+    }
+    return onSnapshot(
+      doc(baseDatos, "ocupacionTurnos", turnoSeleccionadoId),
+      (resultado) => {
+        const ocupadas = resultado.data()?.mesasOcupadas;
+        setMesasOcupadasTurno(
+          typeof ocupadas === "number" && Number.isInteger(ocupadas)
+            ? ocupadas
+            : 0,
+        );
+        setTurnoSuscritoId(turnoSeleccionadoId);
+      },
+      () => {
+        setMensaje(
+          "No pudimos actualizar las mesas disponibles en tiempo real.",
+        );
+      },
+    );
+  }, [modal, turnoSeleccionadoId]);
+  const categoriasDisponibles = useMemo(
+    () => [...new Set(restaurantesVisibles.map((restaurante) => restaurante.categoria))],
+    [restaurantesVisibles],
+  );
   const restaurantesFiltrados = useMemo(
     () =>
-      restaurantes.filter((restaurante) => {
+      restaurantesVisibles.filter((restaurante) => {
         const texto = busqueda.toLowerCase().trim();
-        const coincideTexto = restaurante.categoria.toLowerCase().includes(texto);
+        const coincideTexto =
+          restaurante.nombre.toLowerCase().includes(texto) ||
+          restaurante.categoria.toLowerCase().includes(texto);
         return (
           coincideTexto &&
           (categoria === "Todas" || restaurante.categoria === categoria)
         );
       }),
-    [busqueda, categoria],
+    [busqueda, categoria, restaurantesVisibles],
   );
   const mostrarAcceso = (registro = false, cuenta: TipoCuenta = "usuario") => {
     setEsRegistro(registro);
@@ -1783,7 +2259,11 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const abrirDetalleRestaurante = (restaurante: Restaurante) => {
-    window.history.pushState({}, "", `/restaurante/${restaurante.id}`);
+    window.history.pushState(
+      {},
+      "",
+      `/restaurante/${encodeURIComponent(String(restaurante.id))}`,
+    );
     setRestauranteDetalle(restaurante);
     setVista("detalle-restaurante");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1851,6 +2331,245 @@ function App() {
     if (autenticacion) await signOut(autenticacion);
     irAInicio();
   };
+  const recuperarContraseña = async () => {
+    const correoRecuperacion = correo.trim();
+    if (!correoRecuperacion) {
+      setMensaje("Escribe tu correo electrónico para enviarte el enlace de recuperación.");
+      return;
+    }
+    if (!autenticacion) {
+      setMensaje(
+        "Modo demostración activo. Añade las variables de Firebase para recuperar tu contraseña.",
+      );
+      return;
+    }
+    setCargando(true);
+    setMensaje("");
+    try {
+      await sendPasswordResetEmail(autenticacion, correoRecuperacion);
+      setMensaje(
+        "Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.",
+      );
+    } catch (error) {
+      setMensaje(
+        error instanceof FirebaseError && error.code === "auth/user-not-found"
+          ? "Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña."
+          : mensajeErrorAcceso(error),
+      );
+    } finally {
+      setCargando(false);
+    }
+  };
+  const eliminarCuenta = async () => {
+    if (
+      !usuario ||
+      !autenticacion ||
+      (tipoUsuario !== "usuario" && tipoUsuario !== "restaurante")
+    ) {
+      setMensaje("No pudimos verificar la cuenta que deseas eliminar.");
+      return;
+    }
+    const esRestaurante = tipoUsuario === "restaurante";
+    const proveedores = usuario.providerData.map((proveedor) => proveedor.providerId);
+    const usaContraseña = proveedores.includes(EmailAuthProvider.PROVIDER_ID);
+    const usaGoogle = proveedores.includes(GoogleAuthProvider.PROVIDER_ID);
+    if (usaContraseña && !contraseñaEliminacion) {
+      setMensaje("Escribe tu contraseña actual para confirmar la eliminación.");
+      return;
+    }
+    setCargando(true);
+    setMensaje("");
+    try {
+      if (usaContraseña) {
+        if (!usuario.email) {
+          throw new Error("La cuenta no tiene un correo para verificar la contraseña.");
+        }
+        await reauthenticateWithCredential(
+          usuario,
+          EmailAuthProvider.credential(usuario.email, contraseñaEliminacion),
+        );
+      } else if (usaGoogle) {
+        await reauthenticateWithPopup(usuario, new GoogleAuthProvider());
+      } else {
+        throw new Error(
+          "Este método de acceso no permite verificar la cuenta para eliminarla.",
+        );
+      }
+
+      let restaurantesCuenta = restaurantesPropietario;
+      if (baseDatos) {
+        const db = baseDatos;
+        const restaurantesRemotos = esRestaurante
+          ? await getDocs(
+              query(
+                collection(db, "restaurantes"),
+                where("propietario", "==", usuario.uid),
+              ),
+            )
+          : null;
+        const idsRestaurantesRemotos = new Set(
+            restaurantesRemotos?.docs.map((restaurante) => restaurante.id) ?? [],
+        );
+        if (restaurantesRemotos) {
+          restaurantesCuenta = [
+            ...new Map(
+              [
+                ...restaurantesCuenta.map((restaurante) => [
+                  restaurante.id,
+                  restaurante,
+                ] as const),
+                ...restaurantesRemotos.docs.map((restaurante) => [
+                  restaurante.id,
+                  normalizarRestaurante(restaurante.id, restaurante.data()),
+                ] as const),
+              ],
+            ).values(),
+          ];
+        }
+
+        const reservasConsulta = esRestaurante
+          ? await Promise.all(
+              [...new Set(restaurantesCuenta.map((restaurante) => restaurante.nombre))]
+                .map((nombre) =>
+                  getDocs(
+                    query(
+                      collection(db, "reservas"),
+                      where("restaurante", "==", nombre),
+                    ),
+                  ),
+                ),
+            )
+          : [
+              await getDocs(
+                query(
+                  collection(db, "reservas"),
+                  where("usuario", "==", usuario.uid),
+                ),
+              ),
+            ];
+        const reservasBorrar = [
+          ...new Map(
+            reservasConsulta
+              .flatMap((grupo) => grupo.docs)
+              .map((reserva) => [reserva.id, reserva] as const),
+          ).values(),
+        ];
+        const ocupacionesRestaurantes = esRestaurante
+          ? (
+              await Promise.all(
+                restaurantesCuenta
+                  .filter((restaurante) =>
+                    idsRestaurantesRemotos.has(restaurante.id),
+                  )
+                  .map((restaurante) =>
+                  getDocs(
+                    query(
+                      collection(db, "ocupacionTurnos"),
+                      where("restauranteId", "==", restaurante.id),
+                    ),
+                  ),
+                ),
+              )
+            ).flatMap((grupo) => grupo.docs)
+          : [];
+        for (let inicio = 0; inicio < reservasBorrar.length; inicio += 500) {
+          const lote = writeBatch(db);
+          reservasBorrar
+            .slice(inicio, inicio + 500)
+            .forEach((reserva) => lote.delete(reserva.ref));
+          await lote.commit();
+        }
+
+        if (esRestaurante && restaurantesRemotos) {
+          for (
+            let inicio = 0;
+            inicio < restaurantesRemotos.docs.length;
+            inicio += 250
+          ) {
+            const lote = writeBatch(db);
+            restaurantesRemotos.docs
+              .slice(inicio, inicio + 250)
+              .forEach((restaurante) => {
+                lote.delete(restaurante.ref);
+                lote.delete(doc(db, "restaurantesPublicos", restaurante.id));
+              });
+            await lote.commit();
+          }
+        }
+        for (
+          let inicio = 0;
+          inicio < ocupacionesRestaurantes.length;
+          inicio += 500
+        ) {
+          const lote = writeBatch(db);
+          ocupacionesRestaurantes
+            .slice(inicio, inicio + 500)
+            .forEach((ocupacion) => lote.delete(ocupacion.ref));
+          await lote.commit();
+        }
+        await deleteDoc(doc(db, "perfiles", usuario.uid));
+      }
+
+      if (almacenamiento) {
+        const storage = almacenamiento;
+        const carpetas = esRestaurante
+          ? [
+              `perfiles/${usuario.uid}`,
+              `certificados/${usuario.uid}`,
+              `menus/${usuario.uid}`,
+            ]
+          : [`perfiles/${usuario.uid}`];
+        await Promise.all(
+          carpetas.map((ruta) =>
+            eliminarArchivosDeCarpeta(ref(storage, ruta)),
+          ),
+        );
+      }
+
+      await deleteUser(usuario);
+      localStorage.removeItem(`silla-libre-perfil-${usuario.uid}`);
+      localStorage.removeItem(`silla-libre-reservas-${usuario.uid}`);
+      localStorage.removeItem(`silla-libre-favoritos-${usuario.uid}`);
+      if (esRestaurante) {
+        localStorage.removeItem(`silla-libre-restaurantes-${usuario.uid}`);
+      }
+      setFavoritos([]);
+      setConfirmandoEliminacion(false);
+      setContraseñaEliminacion("");
+      setMensaje(
+        esRestaurante
+          ? "Tu cuenta de restaurante y sus negocios, reservas y archivos asociados fueron eliminados."
+          : "Tu cuenta y tus reservas personales fueron eliminadas.",
+      );
+      irAInicio();
+    } catch (error) {
+      if (
+        error instanceof FirebaseError &&
+        (error.code === "storage/unauthorized" ||
+          error.code === "storage/object-not-found")
+      ) {
+        setMensaje(
+          "Firebase Storage no permitió eliminar los archivos de la cuenta. Revisa las reglas para permitir que el usuario elimine sus propios archivos.",
+        );
+        return;
+      }
+      if (error instanceof FirebaseError && error.code === "permission-denied") {
+        setMensaje(
+          "Firebase no permitió borrar todos los datos. Revisa las reglas de Firestore para que la cuenta pueda eliminar su perfil, sus reservas y, si es restaurante, sus negocios.",
+        );
+      } else {
+        setMensaje(
+          error instanceof FirebaseError
+            ? mensajeErrorAcceso(error)
+            : error instanceof Error
+              ? error.message
+              : "No pudimos eliminar la cuenta. Inténtalo de nuevo.",
+        );
+      }
+    } finally {
+      setCargando(false);
+    }
+  };
   const guardarRestaurantePropietario = async (
     propietario: User,
   ): Promise<void> => {
@@ -1879,14 +2598,35 @@ function App() {
       menu: [],
       menuPdfUrl: "",
       menuPdfNombre: "",
+      mesasPorTurno: 10,
+      diasNoDisponibles: [],
+      fechasNoDisponibles: [],
       creadoEn: serverTimestamp(),
     };
     if (!baseDatos) {
       throw new Error("Firestore no está disponible para guardar el restaurante.");
     }
-    const referenciaRestaurante = await esperarConLimite(
-      addDoc(collection(baseDatos, "restaurantes"), datosRestaurante),
-      "Firestore tardó demasiado al guardar el restaurante.",
+    const db = baseDatos;
+    const referenciaRestaurante = doc(collection(db, "restaurantes"));
+    const referenciaPublica = doc(
+      db,
+      "restaurantesPublicos",
+      referenciaRestaurante.id,
+    );
+    const loteRegistro = writeBatch(db);
+    loteRegistro.set(referenciaRestaurante, datosRestaurante);
+    loteRegistro.set(referenciaPublica, {
+      nombre: datosRestaurante.nombre,
+      direccion: datosRestaurante.direccion,
+      comida: datosRestaurante.comida,
+      propietario: propietario.uid,
+      mesasPorTurno: 10,
+      diasNoDisponibles: [],
+      fechasNoDisponibles: [],
+    });
+    await esperarConLimite(
+      loteRegistro.commit(),
+      "Firestore tardó demasiado al publicar el restaurante.",
     );
     const nuevoRestaurante = normalizarRestaurante(
       referenciaRestaurante.id,
@@ -1903,12 +2643,31 @@ function App() {
     );
     setFormularioRestaurante(restauranteInicial);
   };
-  const alternarFavorito = (id: number) => {
-    setFavoritos((actuales) =>
-      actuales.includes(id)
-        ? actuales.filter((favoritoId) => favoritoId !== id)
-        : [...actuales, id],
-    );
+  const alternarFavorito = (id: number | string) => {
+    const favoritosActualizados = favoritos.includes(id)
+      ? favoritos.filter((favoritoId) => favoritoId !== id)
+      : [...favoritos, id];
+    setFavoritos(favoritosActualizados);
+    const clave = usuario
+      ? `silla-libre-favoritos-${usuario.uid}`
+      : "silla-libre-favoritos";
+    try {
+      localStorage.setItem(clave, JSON.stringify(favoritosActualizados));
+    } catch {
+      setMensaje("No pudimos guardar tus favoritos en este dispositivo.");
+      return;
+    }
+    if (usuario && baseDatos) {
+      void setDoc(
+        doc(baseDatos, "perfiles", usuario.uid),
+        { favoritos: favoritosActualizados },
+        { merge: true },
+      ).catch(() => {
+        setMensaje(
+          "El cambio quedó guardado en este dispositivo, pero no se sincronizó con Firebase.",
+        );
+      });
+    }
   };
 
   const iniciarSesionConGoogle = async () => {
@@ -2109,6 +2868,68 @@ function App() {
       setCargando(false);
     }
   };
+  const guardarDisponibilidad = async (
+    restauranteId: string,
+    configuracion: ConfiguracionDisponibilidad,
+  ) => {
+    const restaurante = restaurantesPropietario.find(
+      (actual) => actual.id === restauranteId,
+    );
+    if (!usuario || !restaurante) {
+      setMensaje("No pudimos verificar el restaurante que quieres actualizar.");
+      return;
+    }
+    if (!baseDatos || restauranteId.startsWith("local-")) {
+      const actualizados = restaurantesPropietario.map((actual) =>
+        actual.id === restauranteId ? { ...actual, ...configuracion } : actual,
+      );
+      setRestaurantesPropietario(actualizados);
+      localStorage.setItem(
+        `silla-libre-restaurantes-${usuario.uid}`,
+        JSON.stringify(actualizados),
+      );
+      setMensaje(
+        "La disponibilidad quedó guardada en este dispositivo; configura Firebase para sincronizarla en tiempo real.",
+      );
+      return;
+    }
+    const db = baseDatos;
+    setCargando(true);
+    setMensaje("");
+    try {
+      const lote = writeBatch(db);
+      const cambiosDisponibilidad = {
+        mesasPorTurno: configuracion.mesasPorTurno,
+        diasNoDisponibles: configuracion.diasNoDisponibles,
+        fechasNoDisponibles: configuracion.fechasNoDisponibles,
+      };
+      lote.update(doc(db, "restaurantes", restauranteId), cambiosDisponibilidad);
+      lote.update(
+        doc(db, "restaurantesPublicos", restauranteId),
+        cambiosDisponibilidad,
+      );
+      await lote.commit();
+      const actualizados = restaurantesPropietario.map((actual) =>
+        actual.id === restauranteId ? { ...actual, ...configuracion } : actual,
+      );
+      setRestaurantesPropietario(actualizados);
+      localStorage.setItem(
+        `silla-libre-restaurantes-${usuario.uid}`,
+        JSON.stringify(actualizados),
+      );
+      setMensaje(
+        `Disponibilidad de ${restaurante.nombre} actualizada en tiempo real.`,
+      );
+    } catch (error) {
+      setMensaje(
+        error instanceof FirebaseError && error.code === "permission-denied"
+          ? "Firebase no permitió actualizar la disponibilidad. Revisa las reglas de ambos documentos del restaurante."
+          : "No pudimos actualizar la disponibilidad. Revisa la conexión e inténtalo de nuevo.",
+      );
+    } finally {
+      setCargando(false);
+    }
+  };
   const cambiarPlato = (
     restauranteId: string,
     platoId: string,
@@ -2275,7 +3096,37 @@ function App() {
     setCargando(true);
     setMensaje("");
     try {
-      if (baseDatos) {
+      if (baseDatos && reserva.turnoId) {
+        const db = baseDatos;
+        await runTransaction(db, async (transaccion) => {
+          const referenciaReserva = doc(db, "reservas", reserva.id!);
+          const referenciaTurno = doc(
+            db,
+            "ocupacionTurnos",
+            reserva.turnoId!,
+          );
+          const [reservaActual, turnoActual] = await Promise.all([
+            transaccion.get(referenciaReserva),
+            transaccion.get(referenciaTurno),
+          ]);
+          if (!reservaActual.exists()) {
+            throw new Error("La reserva ya no existe.");
+          }
+          if (reservaActual.data().estado === "Cancelada") return;
+          transaccion.update(referenciaReserva, {
+            estado: "Cancelada",
+            canceladaEn: serverTimestamp(),
+          });
+          if (turnoActual.exists()) {
+            const ocupadas = turnoActual.data().mesasOcupadas;
+            transaccion.update(referenciaTurno, {
+              mesasOcupadas:
+                typeof ocupadas === "number" ? Math.max(ocupadas - 1, 0) : 0,
+              actualizadoEn: serverTimestamp(),
+            });
+          }
+        });
+      } else if (baseDatos) {
         await updateDoc(doc(baseDatos, "reservas", reserva.id), {
           estado: "Cancelada",
           canceladaEn: serverTimestamp(),
@@ -2294,8 +3145,12 @@ function App() {
         );
       }
       setMensaje(`La reserva de ${reserva.restaurante} fue cancelada.`);
-    } catch {
-      setMensaje("No pudimos cancelar la reserva. Revisa la conexión e inténtalo de nuevo.");
+    } catch (error) {
+      setMensaje(
+        error instanceof Error
+          ? `No pudimos cancelar la reserva: ${error.message}`
+          : "No pudimos cancelar la reserva. Revisa la conexión e inténtalo de nuevo.",
+      );
     } finally {
       setCargando(false);
     }
@@ -2304,8 +3159,14 @@ function App() {
     restaurante = restaurantes[0],
     datosIniciales?: Partial<FormularioReserva>,
   ) => {
-    setRestauranteActivo(restaurante);
+    const restauranteActual = restaurantesVisibles.find(
+      (actual) => String(actual.id) === String(restaurante.id),
+    );
+    setRestauranteActivo(restauranteActual ?? restaurante);
     setReserva((actual) => ({ ...actual, hora: "", ...datosIniciales }));
+    setDisponibilidadActiva(null);
+    setMesasOcupadasTurno(0);
+    setTurnoSuscritoId(null);
     setMensaje("");
     setModal("reserva");
   };
@@ -2326,6 +3187,33 @@ function App() {
       );
       return;
     }
+    const negocioReservable = restaurantesPublicos.find(
+      (actual) => actual.id === String(restauranteActivo.id),
+    );
+    const disponibilidad = disponibilidadActiva ?? negocioReservable ?? null;
+    const ocupacionActual =
+      turnoSuscritoId === turnoSeleccionadoId ? mesasOcupadasTurno : 0;
+    if (
+      disponibilidad &&
+      (reserva.hora.slice(3) !== "00" ||
+        disponibilidad.diasNoDisponibles.includes(
+          new Date(`${reserva.fecha}T12:00:00`).getDay(),
+        ) ||
+        disponibilidad.fechasNoDisponibles.includes(reserva.fecha))
+    ) {
+      setMensaje(
+        "Este restaurante no recibe reservas en esa fecha u hora. Selecciona otro turno.",
+      );
+      return;
+    }
+    if (
+      disponibilidad &&
+      (disponibilidad.mesasPorTurno === 0 ||
+        ocupacionActual >= disponibilidad.mesasPorTurno)
+    ) {
+      setMensaje("No quedan mesas disponibles en ese turno. Elige otra hora.");
+      return;
+    }
     const datos: DatosReserva = {
       restaurante: restauranteActivo.nombre,
       fecha: reserva.fecha,
@@ -2334,18 +3222,79 @@ function App() {
       correo: usuario?.email ?? correo,
     };
     setCargando(true);
+    setMensaje("");
     try {
-      const reservaCreada = baseDatos
-        ? await addDoc(collection(baseDatos, "reservas"), {
+      let reservaId: string | undefined;
+      let turnoId: string | undefined;
+      if (disponibilidad && baseDatos) {
+        const db = baseDatos;
+        turnoId = `${disponibilidad.id}_${reserva.fecha}_${reserva.hora.slice(0, 2)}`;
+        const referenciaNegocio = doc(
+          db,
+          "restaurantesPublicos",
+          String(disponibilidad.id),
+        );
+        const referenciaTurno = doc(db, "ocupacionTurnos", turnoId);
+        const referenciaReserva = doc(collection(db, "reservas"));
+        await runTransaction(db, async (transaccion) => {
+          const [negocioActual, turnoActual] = await Promise.all([
+            transaccion.get(referenciaNegocio),
+            transaccion.get(referenciaTurno),
+          ]);
+          if (!negocioActual.exists()) {
+            throw new Error("El restaurante ya no está disponible para reservas.");
+          }
+          const configuracion = normalizarRestaurantePublico(
+            negocioActual.id,
+            negocioActual.data(),
+          );
+          if (
+            !configuracion ||
+            configuracion.diasNoDisponibles.includes(
+              new Date(`${reserva.fecha}T12:00:00`).getDay(),
+            ) ||
+            configuracion.fechasNoDisponibles.includes(reserva.fecha)
+          ) {
+            throw new Error("El restaurante está cerrado en la fecha seleccionada.");
+          }
+          const cantidadOcupada = turnoActual.data()?.mesasOcupadas;
+          const mesasOcupadas =
+            typeof cantidadOcupada === "number" ? cantidadOcupada : 0;
+          if (mesasOcupadas >= configuracion.mesasPorTurno) {
+            throw new Error("No quedan mesas en ese turno. Elige otra hora.");
+          }
+          transaccion.set(referenciaTurno, {
+            restauranteId: disponibilidad.id,
+            fecha: reserva.fecha,
+            hora: reserva.hora,
+            mesasOcupadas: mesasOcupadas + 1,
+            actualizadoEn: serverTimestamp(),
+          });
+          transaccion.set(referenciaReserva, {
+            ...datos,
+            restauranteId: disponibilidad.id,
+            turnoId,
+            usuario: usuario?.uid ?? "invitado",
+            estado: "Confirmada",
+            creadoEn: serverTimestamp(),
+          });
+        });
+        reservaId = referenciaReserva.id;
+      } else if (baseDatos) {
+        const reservaCreada = await addDoc(collection(baseDatos, "reservas"), {
           ...datos,
+          restauranteId: String(restauranteActivo.id),
           usuario: usuario?.uid ?? "invitado",
           estado: "Confirmada",
           creadoEn: serverTimestamp(),
-        })
-        : null;
+        });
+        reservaId = reservaCreada.id;
+      }
       const reservaGuardada = {
         ...datos,
-        id: reservaCreada?.id,
+        id: reservaId,
+        restauranteId: String(disponibilidad?.id ?? restauranteActivo.id),
+        turnoId,
         estado: "Confirmada",
       };
       if (usuario) {
@@ -2368,9 +3317,11 @@ function App() {
       setMensaje(
         "Reserva confirmada. Descargamos el evento para tu calendario.",
       );
-    } catch {
+    } catch (error) {
       setMensaje(
-        "No pudimos confirmar la reserva. Revisa los datos e inténtalo nuevamente.",
+        error instanceof Error
+          ? error.message
+          : "No pudimos confirmar la reserva. Revisa los datos e inténtalo nuevamente.",
       );
     } finally {
       setCargando(false);
@@ -2564,6 +3515,28 @@ function App() {
     };
     lector.readAsDataURL(archivo);
   };
+  const fechaBloqueada =
+    disponibilidadActiva !== null &&
+    Boolean(
+      reserva.fecha &&
+        (disponibilidadActiva.fechasNoDisponibles.includes(reserva.fecha) ||
+          disponibilidadActiva.diasNoDisponibles.includes(
+            new Date(`${reserva.fecha}T12:00:00`).getDay(),
+          )),
+    );
+  const ocupacionMostrada =
+    turnoSuscritoId === turnoSeleccionadoId ? mesasOcupadasTurno : 0;
+  const mesasRestantes = disponibilidadActiva
+    ? Math.max(
+        disponibilidadActiva.mesasPorTurno - ocupacionMostrada,
+        0,
+      )
+    : null;
+  const turnoSinMesas =
+    disponibilidadActiva !== null &&
+    mesasRestantes !== null &&
+    mesasRestantes < 1;
+  const turnoNoDisponible = fechaBloqueada || turnoSinMesas;
 
   return (
     <div className="aplicacion">
@@ -2704,16 +3677,16 @@ function App() {
             <input
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Busca por tipo de comida..."
+              placeholder="Busca por restaurante o tipo de comida..."
             />
             <select
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
             >
               <option>Todas</option>
-              <option>Cocina Nikkei</option>
-              <option>Parrilla japonesa</option>
-              <option>Cocina italiana</option>
+              {categoriasDisponibles.map((elemento) => (
+                <option key={elemento}>{elemento}</option>
+              ))}
             </select>
             <button
               className="boton boton-vino"
@@ -2808,14 +3781,16 @@ function App() {
                     >
                       Reservar mesa
                     </button>
-                    <a
-                      className="reservar-enlace"
-                      href={restaurante.urlreserva}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Visitar sitio web <span>↗</span>
-                    </a>
+                    {restaurante.urlreserva && (
+                      <a
+                        className="reservar-enlace"
+                        href={restaurante.urlreserva}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Visitar sitio web <span>↗</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               </article>
@@ -2924,6 +3899,9 @@ function App() {
                 }
                 progresoMenu={progresoMenu}
                 cancelarReserva={(reserva) => void cancelarReserva(reserva)}
+                guardarDisponibilidad={(id, configuracion) =>
+                  void guardarDisponibilidad(id, configuracion)
+                }
                 cargando={cargando}
               />
             ) : (
@@ -2950,8 +3928,128 @@ function App() {
                   reservas={reservasPerfil}
                   cargando={reservasCargando}
                 />
+                <section className="favoritos-usuario">
+                  <div className="titulo-estadistica">
+                    <span>Mis restaurantes favoritos</span>
+                    <small>Administra los lugares que guardaste</small>
+                  </div>
+                  {favoritos.length === 0 ? (
+                    <p className="aviso">
+                      Aún no guardaste restaurantes favoritos. Usa el corazón
+                      en cualquier restaurante para añadirlo.
+                    </p>
+                  ) : (
+                    <div className="lista-favoritos">
+                      {favoritos.flatMap((id) => {
+                        const restaurante = restaurantesVisibles.find(
+                          (actual) => String(actual.id) === String(id),
+                        );
+                        if (!restaurante) return [];
+                        return (
+                          <article
+                            className="restaurante-favorito"
+                            key={restaurante.id}
+                          >
+                            <button
+                              className="restaurante-favorito-enlace"
+                              type="button"
+                              onClick={() => abrirDetalleRestaurante(restaurante)}
+                            >
+                              <strong>{restaurante.nombre}</strong>
+                              <span>
+                                {restaurante.categoria} · {restaurante.locacion}
+                              </span>
+                            </button>
+                            <button
+                              className="quitar-favorito"
+                              type="button"
+                              onClick={() => alternarFavorito(restaurante.id)}
+                              aria-label={`Quitar ${restaurante.nombre} de favoritos`}
+                            >
+                              Quitar
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
               </>
             )}
+            {usuario &&
+              ((vista === "perfil-usuario" && tipoUsuario === "usuario") ||
+                (vista === "perfil-restaurante" &&
+                  tipoUsuario === "restaurante")) && (
+                <section className="eliminar-cuenta">
+                  <h3>Eliminar cuenta</h3>
+                  <p>
+                    {tipoUsuario === "restaurante"
+                      ? "Esta acción es permanente. Se eliminarán tu cuenta, tu perfil, tus restaurantes, sus menús y certificados, además de las reservas asociadas."
+                      : "Esta acción es permanente. Se eliminarán tu cuenta, tu perfil y tus reservas personales."}
+                  </p>
+                  {!confirmandoEliminacion ? (
+                    <button
+                      className="boton-eliminar-cuenta"
+                      type="button"
+                      onClick={() => {
+                        setMensaje("");
+                        setConfirmandoEliminacion(true);
+                      }}
+                    >
+                      Eliminar mi cuenta
+                    </button>
+                  ) : (
+                    <div className="confirmacion-eliminar-cuenta">
+                      {usuario.providerData.some(
+                        (proveedor) =>
+                          proveedor.providerId === EmailAuthProvider.PROVIDER_ID,
+                      ) ? (
+                        <label>
+                          Confirma tu contraseña actual
+                          <input
+                            type="password"
+                            autoComplete="current-password"
+                            value={contraseñaEliminacion}
+                            onChange={(evento) =>
+                              setContraseñaEliminacion(evento.target.value)
+                            }
+                            disabled={cargando}
+                          />
+                        </label>
+                      ) : (
+                        <p>
+                          Se abrirá Google para verificar tu identidad antes de
+                          borrar la cuenta.
+                        </p>
+                      )}
+                      <div>
+                        <button
+                          className="boton boton-vino"
+                          type="button"
+                          onClick={() => void eliminarCuenta()}
+                          disabled={cargando}
+                        >
+                          {cargando
+                            ? "Eliminando..."
+                            : "Confirmar eliminación"}
+                        </button>
+                        <button
+                          className="boton-texto"
+                          type="button"
+                          onClick={() => {
+                            setConfirmandoEliminacion(false);
+                            setContraseñaEliminacion("");
+                            setMensaje("");
+                          }}
+                          disabled={cargando}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
             {mensaje && <p className="mensaje-modal perfil-mensaje" role="status">{mensaje}</p>}
           </section>
         )}
@@ -3128,6 +4226,16 @@ function App() {
                         : "Iniciar sesión"}
                   </button>
                 </form>
+                {!esRegistro && (
+                  <button
+                    className="enlace-recuperacion"
+                    type="button"
+                    onClick={() => void recuperarContraseña()}
+                    disabled={cargando}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                )}
                 {tipoCuenta === "usuario" && (
                   <>
                     <div className="separador-google">
@@ -3183,6 +4291,7 @@ function App() {
                       Fecha
                       <input
                         type="date"
+                        min={new Date().toLocaleDateString("en-CA")}
                         value={reserva.fecha}
                         onChange={(e) =>
                           setReserva({ ...reserva, fecha: e.target.value })
@@ -3194,6 +4303,7 @@ function App() {
                       Hora
                       <input
                         type="time"
+                        step={3600}
                         value={reserva.hora}
                         min={
                           restauranteActivo.id === 1
@@ -3217,6 +4327,26 @@ function App() {
                       )}
                       {restauranteActivo.id === 2 && (
                         <small>Horario de DonDoh Bogotá: 12:00 p. m. – 11:00 p. m.</small>
+                      )}
+                      {disponibilidadActiva && (
+                        <small
+                          className={
+                            turnoNoDisponible
+                              ? "estado-disponibilidad cerrado"
+                              : "estado-disponibilidad"
+                          }
+                          aria-live="polite"
+                        >
+                          {fechaBloqueada
+                            ? "El restaurante no abre en la fecha seleccionada."
+                            : !reserva.fecha || !reserva.hora
+                              ? `${disponibilidadActiva.mesasPorTurno} mesas por turno.`
+                              : turnoSinMesas
+                                ? "Turno completo; no quedan mesas."
+                                : `${mesasRestantes} ${
+                                    mesasRestantes === 1 ? "mesa disponible" : "mesas disponibles"
+                                  } en tiempo real.`}
+                        </small>
                       )}
                     </label>
                   </div>
@@ -3247,7 +4377,7 @@ function App() {
                   </label>
                   <button
                     className="boton boton-vino boton-formulario"
-                    disabled={cargando}
+                    disabled={cargando || turnoNoDisponible}
                   >
                     {cargando ? "Confirmando..." : "Confirmar reserva ↗"}
                   </button>

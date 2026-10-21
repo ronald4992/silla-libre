@@ -188,11 +188,32 @@ footer { padding: 32px 8vw; display: flex; align-items: center; justify-content:
 .formulario .opciones-tratamiento label { display: flex; align-items: center; gap: 7px; color: var(--gris); font-size: 12px; font-weight: 400; }
 .formulario .opciones-tratamiento input { width: auto; margin: 0; padding: 0; accent-color: var(--vino); }
 .reservas-usuario { max-width: 1180px; margin: 32px auto 0; padding: 30px 38px; background: var(--blanco); }
-.reserva-usuario { display: grid; grid-template-columns: 1.1fr .8fr 1.4fr .8fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid #e4dbd1; }
+.reserva-usuario { display: grid; grid-template-columns: 1.1fr .8fr 1.4fr .8fr .8fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid #e4dbd1; }
 .reserva-usuario:last-child { border-bottom: 0; }
 .reserva-usuario div { display: grid; gap: 7px; align-content: start; }
 .reserva-usuario span { color: var(--gris); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
 .reserva-usuario strong { color: var(--vino-profundo); font-size: 12px; text-transform: capitalize; }
+.favoritos-usuario { max-width: 1180px; margin: 32px auto 0; padding: 30px 38px; background: var(--blanco); }
+.lista-favoritos { display: grid; gap: 10px; margin-top: 18px; }
+.restaurante-favorito { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 16px 0; border-bottom: 1px solid #e4dbd1; }
+.restaurante-favorito-enlace { display: grid; gap: 6px; padding: 0; border: 0; color: var(--tinta); background: none; text-align: left; cursor: pointer; }
+.restaurante-favorito-enlace strong { color: var(--vino-profundo); font: 600 17px 'Playfair Display', serif; }
+.restaurante-favorito-enlace span { color: var(--gris); font-size: 11px; }
+.quitar-favorito { padding: 8px 12px; border: 1px solid #d9d0c5; color: var(--vino); background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.quitar-favorito:hover { border-color: var(--vino); }
+.disponibilidad-admin { display: grid; gap: 15px; margin: 22px 0; padding: 22px; border: 1px solid #e4dbd1; background: var(--crema); }
+.mesas-disponibles, .fechas-cerradas label { display: grid; gap: 7px; max-width: 260px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.mesas-disponibles input, .fechas-cerradas input { padding: 11px; border: 1px solid #d9d0c5; background: var(--blanco); font: inherit; }
+.dias-cerrados { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 0; padding: 0; border: 0; }
+.dias-cerrados legend { width: 100%; margin-bottom: 8px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.dias-cerrados label { display: flex; align-items: center; gap: 6px; color: var(--gris); font-size: 11px; }
+.dias-cerrados input { accent-color: var(--vino); }
+.fechas-cerradas { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.lista-fechas-cerradas { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lista-fechas-cerradas li { display: flex; align-items: center; justify-content: space-between; gap: 14px; max-width: 310px; color: var(--gris); font-size: 11px; }
+.estado-disponibilidad { color: #2d6b4f; font-weight: 600; }
+.estado-disponibilidad.cerrado { color: #8a2d35; }
+@media (max-width: 620px) { .disponibilidad-admin { padding: 18px; }.fechas-cerradas { align-items: stretch; flex-direction: column; }.fechas-cerradas label { max-width: none; } }
 .perfil-aviso { max-width: 1180px; margin: 0 auto; }
 .perfil-aviso p { margin-bottom: 14px; }
 .perfil-mensaje { max-width: 1180px; margin: 20px auto 0; }
@@ -352,3 +373,15 @@ footer { padding: 32px 8vw; display: flex; align-items: center; justify-content:
 .boton-google:hover:not(:disabled) { background: var(--crema); }
 .boton-google:disabled { cursor: wait; opacity: .65; }
 .boton-google svg { width: 19px; height: 19px; }
+.enlace-recuperacion { justify-self: end; padding: 0; border: 0; color: var(--vino); background: none; font: inherit; font-size: 11px; text-decoration: underline; cursor: pointer; }
+.enlace-recuperacion:disabled { cursor: wait; opacity: .65; }
+.eliminar-cuenta { max-width: 1180px; margin: 32px auto 0; padding: 26px 30px; border: 1px solid #d9b8b8; background: var(--blanco); }
+.eliminar-cuenta h3 { margin: 0 0 8px; color: #8a2d35; font: 600 20px 'Playfair Display', serif; }
+.eliminar-cuenta > p, .confirmacion-eliminar-cuenta > p { margin: 0 0 16px; color: var(--gris); font-size: 12px; line-height: 1.6; }
+.boton-eliminar-cuenta { padding: 10px 15px; border: 1px solid #8a2d35; color: #8a2d35; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+.boton-eliminar-cuenta:hover { color: var(--blanco); background: #8a2d35; }
+.confirmacion-eliminar-cuenta { display: grid; gap: 14px; max-width: 420px; }
+.confirmacion-eliminar-cuenta label { display: grid; gap: 7px; color: var(--tinta); font-size: 11px; font-weight: 600; }
+.confirmacion-eliminar-cuenta input { width: 100%; padding: 12px; border: 1px solid #d9d0c5; color: var(--tinta); background: var(--crema); font: inherit; }
+.confirmacion-eliminar-cuenta > div { display: flex; align-items: center; gap: 18px; }
+@media (max-width: 620px) { .eliminar-cuenta { padding: 22px; }.confirmacion-eliminar-cuenta > div { align-items: flex-start; flex-direction: column; gap: 12px; } }
