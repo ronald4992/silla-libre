@@ -1,0 +1,14 @@
+{
+  "name": "silla-libre-workspace",
+  "private": true,
+  "workspaces": [
+    "silla-libre"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=silla-libre",
+    "servidor": "npm run servidor --workspace=silla-libre",
+    "build": "npm run build --workspace=silla-libre",
+    "lint": "npm run lint --workspace=silla-libre",
+    "preview": "npm run preview --workspace=silla-libre"
+  }
+}

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile,
   type User,
@@ -1307,7 +1309,17 @@ function mensajeErrorAcceso(error: unknown): string {
     case "auth/weak-password":
       return "La contraseña debe tener al menos 6 caracteres.";
     case "auth/operation-not-allowed":
-      return "El registro por correo está desactivado. Activa Correo/Contraseña en Firebase Authentication.";
+      return "Este método de acceso está desactivado. Actívalo en Firebase Authentication.";
+    case "auth/popup-closed-by-user":
+      return "Cerraste la ventana de Google antes de completar el acceso.";
+    case "auth/popup-blocked":
+      return "El navegador bloqueó la ventana de Google. Permite las ventanas emergentes e inténtalo de nuevo.";
+    case "auth/cancelled-popup-request":
+      return "Ya hay una ventana de acceso abierta. Complétala antes de volver a intentarlo.";
+    case "auth/unauthorized-domain":
+      return "Este dominio no está autorizado para iniciar sesión. Añádelo a los dominios autorizados en Firebase Authentication.";
+    case "auth/account-exists-with-different-credential":
+      return "Ya existe una cuenta con este correo. Inicia sesión con el método que usaste al registrarte.";
     case "auth/network-request-failed":
       return "No pudimos conectar con Firebase. Revisa tu conexión e inténtalo de nuevo.";
     case "auth/too-many-requests":
@@ -1897,6 +1909,25 @@ function App() {
         ? actuales.filter((favoritoId) => favoritoId !== id)
         : [...actuales, id],
     );
+  };
+
+  const iniciarSesionConGoogle = async () => {
+    if (!autenticacion) {
+      setMensaje(
+        "Modo demostración activo. Añade las variables de Firebase para habilitar tu cuenta.",
+      );
+      return;
+    }
+    setCargando(true);
+    setMensaje("");
+    try {
+      await signInWithPopup(autenticacion, new GoogleAuthProvider());
+      setModal(null);
+    } catch (error) {
+      setMensaje(mensajeErrorAcceso(error));
+    } finally {
+      setCargando(false);
+    }
   };
 
   const gestionarAcceso = async (evento: React.FormEvent<HTMLFormElement>) => {
@@ -3097,6 +3128,43 @@ function App() {
                         : "Iniciar sesión"}
                   </button>
                 </form>
+                {tipoCuenta === "usuario" && (
+                  <>
+                    <div className="separador-google">
+                      <span>o continúa con</span>
+                    </div>
+                    <button
+                      className="boton-google"
+                      type="button"
+                      onClick={iniciarSesionConGoogle}
+                      disabled={cargando}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 48 48"
+                        focusable="false"
+                      >
+                        <path
+                          fill="#4285F4"
+                          d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.9-3.6-11.5-8.4H5.7v5.2A20 20 0 0 0 24 44Z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M12.5 27.8a12 12 0 0 1 0-7.6V15H5.7a20 20 0 0 0 0 18Z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M24 11.8c3 0 5.7 1 7.8 3l5.8-5.8A19.5 19.5 0 0 0 24 4 20 20 0 0 0 5.7 15l6.8 5.2c1.6-4.8 6.2-8.4 11.5-8.4Z"
+                        />
+                      </svg>
+                      Continuar con Google
+                    </button>
+                  </>
+                )}
               </>
             )}
             {modal === "reserva" && (

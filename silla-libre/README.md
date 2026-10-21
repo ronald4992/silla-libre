@@ -73,3 +73,21 @@ export default defineConfig([
 ])
 
 ```
+
+## Inicio de sesión con Google
+
+El acceso con Google se configura en Firebase; no requiere claves de Google
+adicionales en el código:
+
+1. En Firebase Console, abre **Authentication → Sign-in method** y habilita
+   **Google**.
+2. En **Authentication → Settings → Authorized domains**, añade el dominio
+   donde publicarás la aplicación. Para desarrollo local, autoriza
+   `localhost` si no aparece en la lista.
+3. Copia la configuración de la aplicación web de Firebase a
+   `silla-libre/.env.local` usando como guía `silla-libre/.env.example`.
+4. Desde la raíz del repositorio, ejecuta `npm run dev` y usa **Continuar con
+   Google** en la ventana de acceso.
+
+Google está habilitado para cuentas de comensal. Las cuentas de restaurante
+siguen utilizando su registro con los datos y el certificado requeridos.
