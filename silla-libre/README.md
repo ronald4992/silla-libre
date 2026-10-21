@@ -91,3 +91,34 @@ adicionales en el código:
 
 Google está habilitado para cuentas de comensal. Las cuentas de restaurante
 siguen utilizando su registro con los datos y el certificado requeridos.
+
+## Desplegar en Netlify
+
+La configuración de [`netlify.toml`](../netlify.toml) establece la aplicación
+`silla-libre/` como base del build, ejecuta `npm run build` y publica `dist`.
+Conecta el repositorio en Netlify y deja que use esta configuración. El archivo
+`public/_redirects` permite que las rutas de la aplicación, como
+`/perfil/usuario`, carguen correctamente al abrirlas o recargarlas directamente.
+Configura en Netlify las variables de entorno `VITE_FIREBASE_*` necesarias
+antes del despliegue.
+
+## Desplegar en Cloudflare Pages
+
+Este repositorio contiene un workspace npm en la raíz y la aplicación Vite en
+`silla-libre/`. Al crear el proyecto de Pages, configura:
+
+- **Root directory:** `silla-libre`
+- **Build command:** `npm run build`
+- **Build output directory:** `dist`
+
+Si usas el detector de aplicaciones de Cloudflare desde VS Code, abre
+`silla-libre.code-workspace` con **File → Open Workspace from File...** y vuelve
+a ejecutar la detección. Ese workspace coloca la aplicación (`silla-libre/`)
+como directorio raíz activo, en vez de la raíz del workspace npm.
+
+No uses la raíz del repositorio como directorio de la aplicación: Cloudflare
+intentará detectar el workspace y mostrará el error de detección. En los ajustes
+de variables de entorno de Pages, configura las variables `VITE_FIREBASE_*`
+que necesite el proyecto (ver `silla-libre/.env.example`). El servidor Node.js
+de `silla-libre/servidor/` no forma parte del build estático de Pages; debe
+desplegarse por separado si se usa.
