@@ -94,13 +94,23 @@ siguen utilizando su registro con los datos y el certificado requeridos.
 
 ## Panel de administración
 
-El panel está disponible en `/admin` y muestra los restaurantes publicados.
-Para habilitarlo, configura `VITE_ADMIN_EMAIL` con el correo administrador en
-`silla-libre/.env.local` y en las variables de entorno del hosting. La cuenta
-debe existir en Firebase Authentication, iniciar sesión con Email/Password y
-tener el correo verificado. El panel no guarda ni incluye contraseñas en el
-código; crea o administra las credenciales exclusivamente desde Firebase
-Authentication.
+El panel está disponible en `/admin`; muestra las estadísticas de registro
+mensuales y permite administrar cuentas y restaurantes publicados. Para usar
+la gestión de cuentas, configura `VITE_ADMIN_EMAIL` para mostrar el acceso y
+`ADMIN_EMAIL` en el servidor para autorizar operaciones. Ambos deben contener
+el correo administrador. La cuenta debe existir en Firebase Authentication,
+iniciar sesión y tener el correo verificado.
+
+La gestión de cuentas requiere el servidor Node.js (`npm run servidor`) y
+Firebase Admin SDK. Configura credenciales de servidor mediante Application
+Default Credentials (ADC) o el secreto `FIREBASE_SERVICE_ACCOUNT_JSON`, además
+de `VITE_FIREBASE_PROJECT_ID` y `VITE_FIREBASE_STORAGE_BUCKET`. Nunca guardes
+la clave privada de Firebase Admin en variables `VITE_`, en archivos públicos
+ni en el repositorio. `VITE_API_URL` debe apuntar a este servidor; en
+producción, configura también `ORIGEN_FRONTEND` con el origen de la aplicación.
+El servidor valida el token de Firebase y el correo verificado antes de
+devolver cuentas o eliminar una. La eliminación incluye los documentos y
+archivos asociados y no permite borrar la cuenta administradora.
 
 ### Recuperación y eliminación de cuentas
 

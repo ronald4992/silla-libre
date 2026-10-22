@@ -1775,14 +1775,116 @@ function esCuentaRestaurante(uid: string): boolean {
   );
 }
 
+interface CuentaAdministrada {
+  uid: string;
+  correo: string;
+  nombre: string;
+  tipo: TipoCuenta;
+  creadoEn: string;
+}
+
+interface EstadisticaRegistroMes {
+  clave: string;
+  mes: string;
+  usuarios: number;
+  restaurantes: number;
+}
+
+interface DatosAdministracion {
+  cuentas: CuentaAdministrada[];
+  estadisticas: {
+    usuarios: number;
+    restaurantes: number;
+    registrosPorMes: EstadisticaRegistroMes[];
+  };
+}
+
+function validarDatosAdministracion(valor: unknown): DatosAdministracion | null {
+  if (!valor || typeof valor !== "object") return null;
+  const datos = valor as Record<string, unknown>;
+  if (!Array.isArray(datos.cuentas) || !datos.estadisticas || typeof datos.estadisticas !== "object") {
+    return null;
+  }
+  const estadisticas = datos.estadisticas as Record<string, unknown>;
+  if (
+    typeof estadisticas.usuarios !== "number" ||
+    typeof estadisticas.restaurantes !== "number" ||
+    !Array.isArray(estadisticas.registrosPorMes)
+  ) {
+    return null;
+  }
+  const cuentas = datos.cuentas.filter((cuenta): cuenta is CuentaAdministrada => {
+    if (!cuenta || typeof cuenta !== "object") return false;
+    const actual = cuenta as Record<string, unknown>;
+    return (
+      typeof actual.uid === "string" &&
+      typeof actual.correo === "string" &&
+      typeof actual.nombre === "string" &&
+      (actual.tipo === "usuario" || actual.tipo === "restaurante") &&
+      typeof actual.creadoEn === "string"
+    );
+  });
+  const registrosPorMes = estadisticas.registrosPorMes.filter(
+    (mes): mes is EstadisticaRegistroMes => {
+      if (!mes || typeof mes !== "object") return false;
+      const actual = mes as Record<string, unknown>;
+      return (
+        typeof actual.clave === "string" &&
+        typeof actual.mes === "string" &&
+        typeof actual.usuarios === "number" &&
+        typeof actual.restaurantes === "number"
+      );
+    },
+  );
+  return {
+    cuentas,
+    estadisticas: {
+      usuarios: estadisticas.usuarios,
+      restaurantes: estadisticas.restaurantes,
+      registrosPorMes,
+    },
+  };
+}
+
+async function obtenerDatosAdministracion(usuario: User): Promise<DatosAdministracion> {
+  const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+  if (!apiUrl) {
+    throw new Error("Configura VITE_API_URL para conectar el panel con el servidor.");
+  }
+  const respuesta = await fetch(`${apiUrl}/admin/cuentas`, {
+    headers: { Authorization: `Bearer ${await usuario.getIdToken()}` },
+  });
+  const cuerpo: unknown = await respuesta.json();
+  if (!respuesta.ok) {
+    const mensaje =
+      cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo &&
+      typeof cuerpo.mensaje === "string"
+        ? cuerpo.mensaje
+        : "No se pudieron cargar las cuentas administradas.";
+    throw new Error(mensaje);
+  }
+  const datos = validarDatosAdministracion(cuerpo);
+  if (!datos) throw new Error("El servidor devolvió datos de administración no válidos.");
+  return datos;
+}
+
 function PanelAdministrador({
   restaurantes,
   cargando,
+  usuario,
 }: {
   restaurantes: RestauranteReservable[];
   cargando: boolean;
+  usuario: User;
 }) {
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaCuentas, setBusquedaCuentas] = useState("");
+  const [cuentas, setCuentas] = useState<CuentaAdministrada[]>([]);
+  const [estadisticas, setEstadisticas] =
+    useState<DatosAdministracion["estadisticas"] | null>(null);
+  const [cuentasCargando, setCuentasCargando] = useState(true);
+  const [errorCuentas, setErrorCuentas] = useState("");
+  const [cuentaEliminando, setCuentaEliminando] = useState<string | null>(null);
   const restaurantesFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase();
     if (!termino) return restaurantes;
@@ -1796,25 +1898,244 @@ function PanelAdministrador({
   const categorias = new Set(
     restaurantes.map((restaurante) => restaurante.categoria),
   );
+  const cuentasFiltradas = useMemo(() => {
+    const termino = busquedaCuentas.trim().toLocaleLowerCase();
+    if (!termino) return cuentas;
+    return cuentas.filter((cuenta) =>
+      [cuenta.nombre, cuenta.correo, cuenta.tipo]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(termino),
+    );
+  }, [busquedaCuentas, cuentas]);
+
+  useEffect(() => {
+    let vigente = true;
+    obtenerDatosAdministracion(usuario)
+      .then((datos) => {
+        if (!vigente) return;
+        setCuentas(datos.cuentas);
+        setEstadisticas(datos.estadisticas);
+      })
+      .catch((error: unknown) => {
+        if (vigente) {
+          setErrorCuentas(
+            error instanceof Error
+              ? error.message
+              : "No se pudieron cargar las cuentas administradas.",
+          );
+        }
+      })
+      .finally(() => {
+        if (vigente) setCuentasCargando(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [usuario]);
+
+  const eliminarCuenta = async (cuenta: CuentaAdministrada) => {
+    if (
+      cuenta.uid === usuario.uid ||
+      !window.confirm(
+        `¿Eliminar la cuenta ${cuenta.correo} y todos sus datos asociados? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+    setCuentaEliminando(cuenta.uid);
+    setErrorCuentas("");
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+      if (!apiUrl) {
+        throw new Error("Configura VITE_API_URL para conectar con el servidor.");
+      }
+      const respuesta = await fetch(
+        `${apiUrl}/admin/cuentas/${encodeURIComponent(cuenta.uid)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${await usuario.getIdToken()}` },
+        },
+      );
+      const cuerpo: unknown = await respuesta.json();
+      if (!respuesta.ok) {
+        const mensaje =
+          cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo &&
+          typeof cuerpo.mensaje === "string"
+            ? cuerpo.mensaje
+            : "No se pudo eliminar la cuenta.";
+        throw new Error(mensaje);
+      }
+      setCuentas((actuales) => actuales.filter((actual) => actual.uid !== cuenta.uid));
+      setEstadisticas((actuales) => {
+        if (!actuales) return actuales;
+        const claveMes = cuenta.creadoEn.slice(0, 7);
+        return {
+          ...actuales,
+          [cuenta.tipo === "restaurante" ? "restaurantes" : "usuarios"]: Math.max(
+            actuales[cuenta.tipo === "restaurante" ? "restaurantes" : "usuarios"] - 1,
+            0,
+          ),
+          registrosPorMes: actuales.registrosPorMes.map((mes) =>
+            mes.clave !== claveMes
+              ? mes
+              : {
+                  ...mes,
+                  [cuenta.tipo === "restaurante" ? "restaurantes" : "usuarios"]:
+                    Math.max(
+                      mes[cuenta.tipo === "restaurante" ? "restaurantes" : "usuarios"] -
+                        1,
+                      0,
+                    ),
+                },
+          ),
+        };
+      });
+    } catch (error) {
+      setErrorCuentas(
+        error instanceof Error ? error.message : "No se pudo eliminar la cuenta.",
+      );
+    } finally {
+      setCuentaEliminando(null);
+    }
+  };
+  const maximoRegistrosMensuales = Math.max(
+    1,
+    ...(estadisticas?.registrosPorMes.map(
+      (mes) => mes.usuarios + mes.restaurantes,
+    ) ?? []),
+  );
 
   return (
     <>
       <div className="admin-estadisticas">
         <article>
+          <span>Cuentas de comensales</span>
+          <strong>{estadisticas?.usuarios ?? "—"}</strong>
+        </article>
+        <article>
+          <span>Cuentas de restaurantes</span>
+          <strong>{estadisticas?.restaurantes ?? "—"}</strong>
+        </article>
+        <article>
           <span>Restaurantes publicados</span>
           <strong>{restaurantes.length}</strong>
         </article>
-        <article>
-          <span>Categorías</span>
-          <strong>{categorias.size}</strong>
-        </article>
-        <article>
-          <span>Estado de la plataforma</span>
-          <strong className="admin-estado">
-            <i /> En línea
-          </strong>
-        </article>
       </div>
+      <section className="admin-listado admin-registros">
+        <div className="admin-listado-encabezado">
+          <div>
+            <h3>Registros de los últimos seis meses</h3>
+            <p>Altas de cuentas de comensales y restaurantes por mes.</p>
+          </div>
+          <span className="admin-categorias">{categorias.size} categorías publicadas</span>
+        </div>
+        {cuentasCargando ? (
+          <p className="aviso">Cargando estadísticas...</p>
+        ) : estadisticas ? (
+          <div className="admin-grafico">
+            {estadisticas.registrosPorMes.map((mes) => {
+              const total = mes.usuarios + mes.restaurantes;
+              return (
+                <div className="admin-grafico-mes" key={mes.clave}>
+                  <div className="admin-grafico-barras" aria-label={`${mes.usuarios} comensales, ${mes.restaurantes} restaurantes`}>
+                    <span
+                      className="admin-barra-usuarios"
+                      style={{
+                        height: `${(mes.usuarios / maximoRegistrosMensuales) * 100}%`,
+                      }}
+                    />
+                    <span
+                      className="admin-barra-restaurantes"
+                      style={{
+                        height: `${(mes.restaurantes / maximoRegistrosMensuales) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <strong>{total}</strong>
+                  <small>{mes.mes}</small>
+                </div>
+              );
+            })}
+            <div className="admin-leyenda">
+              <span><i className="admin-barra-usuarios" /> Comensales</span>
+              <span><i className="admin-barra-restaurantes" /> Restaurantes</span>
+            </div>
+          </div>
+        ) : (
+          <p className="aviso">No hay estadísticas disponibles.</p>
+        )}
+      </section>
+      <section className="admin-listado">
+        <div className="admin-listado-encabezado">
+          <div>
+            <h3>Cuentas registradas</h3>
+            <p>Administra las cuentas y elimina las que ya no deben tener acceso.</p>
+          </div>
+          <label>
+            <span className="sr-only">Buscar cuentas</span>
+            <input
+              type="search"
+              value={busquedaCuentas}
+              onChange={(evento) => setBusquedaCuentas(evento.target.value)}
+              placeholder="Buscar por nombre, correo o tipo"
+            />
+          </label>
+        </div>
+        {errorCuentas && <p className="aviso" role="alert">{errorCuentas}</p>}
+        {cuentasCargando ? (
+          <p className="aviso">Cargando cuentas...</p>
+        ) : cuentasFiltradas.length === 0 ? (
+          <p className="aviso">
+            {cuentas.length === 0
+              ? "No se encontraron cuentas registradas."
+              : "No hay cuentas que coincidan con la búsqueda."}
+          </p>
+        ) : (
+          <div className="admin-tabla-contenedor">
+            <table className="admin-tabla">
+              <thead>
+                <tr>
+                  <th>Cuenta</th>
+                  <th>Tipo</th>
+                  <th>Fecha de registro</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentasFiltradas.map((cuenta) => (
+                  <tr key={cuenta.uid}>
+                    <td>
+                      <strong>{cuenta.nombre || "Sin nombre"}</strong>
+                      <small className="admin-correo-cuenta">{cuenta.correo}</small>
+                    </td>
+                    <td>{cuenta.tipo === "restaurante" ? "Restaurante" : "Comensal"}</td>
+                    <td>{new Date(cuenta.creadoEn).toLocaleDateString("es-CO")}</td>
+                    <td>
+                      <button
+                        className="admin-eliminar"
+                        type="button"
+                        disabled={
+                          cuenta.uid === usuario.uid ||
+                          cuentaEliminando !== null
+                        }
+                        onClick={() => void eliminarCuenta(cuenta)}
+                        aria-label={`Eliminar cuenta ${cuenta.correo}`}
+                      >
+                        {cuentaEliminando === cuenta.uid
+                          ? "Eliminando..."
+                          : cuenta.uid === usuario.uid
+                            ? "Cuenta actual"
+                            : "Eliminar cuenta"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       <section className="admin-listado">
         <div className="admin-listado-encabezado">
           <div>
@@ -2371,9 +2692,8 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const usuarioEsAdministrador = Boolean(
-    usuario?.emailVerified &&
-      correoAdministrador &&
-      usuario.email?.trim().toLowerCase() === correoAdministrador,
+    correoAdministrador &&
+      usuario?.email?.trim().toLowerCase() === correoAdministrador,
   );
   const verificarCorreoAdministrador = async () => {
     if (!usuario || !autenticacion) return;
@@ -3809,6 +4129,7 @@ function App() {
               <PanelAdministrador
                 restaurantes={restaurantesPublicos}
                 cargando={restaurantesPublicosCargando}
+                usuario={usuario}
               />
             )}
           </section>
