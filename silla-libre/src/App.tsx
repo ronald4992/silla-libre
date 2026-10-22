@@ -8,6 +8,8 @@ import {
   onAuthStateChanged,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
+  reload,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -1351,8 +1353,11 @@ interface ReservaPerfil extends DatosReserva {
 type VistaPagina =
   | "inicio"
   | "detalle-restaurante"
+  | "panel-admin"
   | "perfil-usuario"
   | "perfil-restaurante";
+const correoAdministrador =
+  import.meta.env.VITE_ADMIN_EMAIL?.trim().toLowerCase() ?? "";
 const reservaInicial: FormularioReserva = {
   fecha: "",
   hora: "",
@@ -1651,6 +1656,7 @@ function normalizarReserva(
   };
 }
 function leerVistaPagina(): VistaPagina {
+  if (window.location.pathname === "/admin") return "panel-admin";
   if (window.location.pathname === "/perfil/restaurante") {
     return "perfil-restaurante";
   }
@@ -1769,6 +1775,103 @@ function esCuentaRestaurante(uid: string): boolean {
   );
 }
 
+function PanelAdministrador({
+  restaurantes,
+  cargando,
+}: {
+  restaurantes: RestauranteReservable[];
+  cargando: boolean;
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const restaurantesFiltrados = useMemo(() => {
+    const termino = busqueda.trim().toLocaleLowerCase();
+    if (!termino) return restaurantes;
+    return restaurantes.filter((restaurante) =>
+      [restaurante.nombre, restaurante.categoria, restaurante.locacion]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(termino),
+    );
+  }, [busqueda, restaurantes]);
+  const categorias = new Set(
+    restaurantes.map((restaurante) => restaurante.categoria),
+  );
+
+  return (
+    <>
+      <div className="admin-estadisticas">
+        <article>
+          <span>Restaurantes publicados</span>
+          <strong>{restaurantes.length}</strong>
+        </article>
+        <article>
+          <span>Categorías</span>
+          <strong>{categorias.size}</strong>
+        </article>
+        <article>
+          <span>Estado de la plataforma</span>
+          <strong className="admin-estado">
+            <i /> En línea
+          </strong>
+        </article>
+      </div>
+      <section className="admin-listado">
+        <div className="admin-listado-encabezado">
+          <div>
+            <h3>Restaurantes</h3>
+            <p>Negocios visibles en el directorio público.</p>
+          </div>
+          <label>
+            <span className="sr-only">Buscar restaurantes</span>
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(evento) => setBusqueda(evento.target.value)}
+              placeholder="Buscar por nombre, tipo o ubicación"
+            />
+          </label>
+        </div>
+        {cargando ? (
+          <p className="aviso">Cargando restaurantes...</p>
+        ) : restaurantesFiltrados.length === 0 ? (
+          <p className="aviso">
+            {restaurantes.length === 0
+              ? "Todavía no hay restaurantes publicados."
+              : "No hay restaurantes que coincidan con la búsqueda."}
+          </p>
+        ) : (
+          <div className="admin-tabla-contenedor">
+            <table className="admin-tabla">
+              <thead>
+                <tr>
+                  <th>Restaurante</th>
+                  <th>Categoría</th>
+                  <th>Ubicación</th>
+                  <th>Mesas por turno</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {restaurantesFiltrados.map((restaurante) => (
+                  <tr key={restaurante.id}>
+                    <td>{restaurante.nombre}</td>
+                    <td>{restaurante.categoria}</td>
+                    <td>{restaurante.locacion || "Sin ubicación"}</td>
+                    <td>{restaurante.mesasPorTurno}</td>
+                    <td>
+                      <span className="admin-publicado">Publicado</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
 function App() {
   const [pestaña, setPestaña] = useState<Pestaña>("inicio");
   const [vista, setVista] = useState<VistaPagina>(leerVistaPagina);
@@ -1807,6 +1910,8 @@ function App() {
   const [restaurantesPublicos, setRestaurantesPublicos] = useState<
     RestauranteReservable[]
   >([]);
+  const [restaurantesPublicosCargando, setRestaurantesPublicosCargando] =
+    useState(true);
   const [disponibilidadActiva, setDisponibilidadActiva] =
     useState<RestauranteReservable | null>(null);
   const [mesasOcupadasTurno, setMesasOcupadasTurno] = useState(0);
@@ -1906,6 +2011,7 @@ function App() {
           return restaurante ? [restaurante] : [];
         });
         setRestaurantesPublicos(cargados);
+        setRestaurantesPublicosCargando(false);
         setRestaurantesPropietario((actuales) =>
           actuales.map((restaurante) => {
             const publico = cargados.find((elemento) => elemento.id === restaurante.id);
@@ -1939,6 +2045,7 @@ function App() {
         }
       },
       () => {
+        setRestaurantesPublicosCargando(false);
         setMensaje(
           "No pudimos cargar la lista de restaurantes administrados. Revisa las reglas de lectura pública de Firebase.",
         );
@@ -2257,6 +2364,36 @@ function App() {
     setRestauranteDetalle(null);
     setPestaña("inicio");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const abrirPanelAdmin = () => {
+    window.history.pushState({}, "", "/admin");
+    setVista("panel-admin");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const usuarioEsAdministrador = Boolean(
+    usuario?.emailVerified &&
+      correoAdministrador &&
+      usuario.email?.trim().toLowerCase() === correoAdministrador,
+  );
+  const verificarCorreoAdministrador = async () => {
+    if (!usuario || !autenticacion) return;
+    setCargando(true);
+    setMensaje("");
+    try {
+      await reload(usuario);
+      const usuarioActualizado = autenticacion.currentUser;
+      setUsuario(usuarioActualizado);
+      if (usuarioActualizado?.emailVerified) {
+        setMensaje("Correo verificado. El panel ya está disponible.");
+      } else {
+        await sendEmailVerification(usuario);
+        setMensaje("Enviamos un enlace de verificación a tu correo.");
+      }
+    } catch (error) {
+      setMensaje(mensajeErrorAcceso(error));
+    } finally {
+      setCargando(false);
+    }
   };
   const abrirDetalleRestaurante = (restaurante: Restaurante) => {
     window.history.pushState(
@@ -3612,10 +3749,70 @@ function App() {
               ← Volver al inicio
             </button>
           )}
+          {usuarioEsAdministrador && vista !== "panel-admin" && (
+            <button className="boton boton-dorado" onClick={abrirPanelAdmin}>
+              Panel administrador
+            </button>
+          )}
         </div>
       </header>
       <main>
-        {vista === "inicio" ? (
+        {vista === "panel-admin" ? (
+          <section className="perfil-seccion panel-admin-seccion">
+            <div className="perfil-encabezado">
+              <div>
+                <p className="sobretitulo oscuro">SILLA LIBRE · ADMINISTRACIÓN</p>
+                <h2>Panel de administración</h2>
+                <p className="texto-seccion">
+                  Consulta el estado de los restaurantes publicados en la plataforma.
+                </p>
+              </div>
+              {usuario && (
+                <div className="acciones-perfil">
+                  <span className="admin-correo">{usuario.email}</span>
+                  <button className="boton-texto" onClick={() => void cerrarSesion()}>
+                    Cerrar sesión <span>↗</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            {!correoAdministrador ? (
+              <p className="aviso perfil-aviso">
+                El acceso administrativo no está configurado. Define VITE_ADMIN_EMAIL
+                en las variables de entorno y vuelve a desplegar.
+              </p>
+            ) : autenticacionCargando ? (
+              <p className="aviso perfil-aviso">Verificando el acceso...</p>
+            ) : !usuario ? (
+              <div className="aviso perfil-aviso">
+                <p>Inicia sesión con la cuenta administradora para continuar.</p>
+                <button className="boton boton-vino" onClick={() => mostrarAcceso()}>
+                  Iniciar sesión
+                </button>
+              </div>
+            ) : usuario.email?.trim().toLowerCase() !== correoAdministrador ? (
+              <p className="aviso perfil-aviso">
+                Esta cuenta no tiene acceso al panel de administración.
+              </p>
+            ) : !usuario.emailVerified ? (
+              <div className="aviso perfil-aviso">
+                <p>Verifica el correo de la cuenta administradora para continuar.</p>
+                <button
+                  className="boton boton-vino"
+                  onClick={() => void verificarCorreoAdministrador()}
+                  disabled={cargando}
+                >
+                  {cargando ? "Enviando..." : "Enviar enlace de verificación"}
+                </button>
+              </div>
+            ) : (
+              <PanelAdministrador
+                restaurantes={restaurantesPublicos}
+                cargando={restaurantesPublicosCargando}
+              />
+            )}
+          </section>
+        ) : vista === "inicio" ? (
           <>
         <section className="hero" id="inicio">
           <div className="hero-contenido">
@@ -4227,14 +4424,28 @@ function App() {
                   </button>
                 </form>
                 {!esRegistro && (
-                  <button
-                    className="enlace-recuperacion"
-                    type="button"
-                    onClick={() => void recuperarContraseña()}
-                    disabled={cargando}
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
+                  <>
+                    <button
+                      className="enlace-recuperacion"
+                      type="button"
+                      onClick={() => void recuperarContraseña()}
+                      disabled={cargando}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                    <p className="enlace-registro">
+                      ¿No tienes cuenta?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMensaje("");
+                          setEsRegistro(true);
+                        }}
+                      >
+                        Crear cuenta
+                      </button>
+                    </p>
+                  </>
                 )}
                 {tipoCuenta === "usuario" && (
                   <>

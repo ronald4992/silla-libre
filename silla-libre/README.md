@@ -92,6 +92,16 @@ adicionales en el código:
 Google está habilitado para cuentas de comensal. Las cuentas de restaurante
 siguen utilizando su registro con los datos y el certificado requeridos.
 
+## Panel de administración
+
+El panel está disponible en `/admin` y muestra los restaurantes publicados.
+Para habilitarlo, configura `VITE_ADMIN_EMAIL` con el correo administrador en
+`silla-libre/.env.local` y en las variables de entorno del hosting. La cuenta
+debe existir en Firebase Authentication, iniciar sesión con Email/Password y
+tener el correo verificado. El panel no guarda ni incluye contraseñas en el
+código; crea o administra las credenciales exclusivamente desde Firebase
+Authentication.
+
 ### Recuperación y eliminación de cuentas
 
 Activa **Email/Password** en Firebase Authentication para permitir restablecer
