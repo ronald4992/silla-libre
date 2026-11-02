@@ -1612,7 +1612,7 @@ function separarNombreCompleto(nombre: string): { nombre: string; apellido: stri
     apellido: partes.join(" "),
   };
 }
-function leerReservasGuardadas(uid: string, correo?: string): ReservaPerfil[] {
+function leerReservasGuardadas(uid: string): ReservaPerfil[] {
   const guardado = localStorage.getItem(`silla-libre-reservas-${uid}`);
   if (!guardado) return [];
   try {
@@ -1627,7 +1627,6 @@ function leerReservasGuardadas(uid: string, correo?: string): ReservaPerfil[] {
         typeof dato.hora !== "string" ||
         typeof dato.personas !== "number" ||
         typeof dato.correo !== "string" ||
-        (correo && dato.correo !== correo) ||
         (typeof dato.usuarioId === "string" && dato.usuarioId !== uid)
       ) {
         return [];
