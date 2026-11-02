@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function esAdministrador() {
+      return autenticado()
+        && request.auth.token.admin == true;
+    }
+
+    match /usuarios/{usuarioId} {
+      allow create: if autenticado()
+        && request.auth.uid == usuarioId;
+
+      allow read, update, delete: if autenticado()
+        && request.auth.uid == usuarioId;
+    }
+
+    match /restaurantes/{restauranteId} {
+      allow read: if true;
+      allow create, update, delete: if esAdministrador();
+    }
+
+    match /reservas/{reservaId} {
+      allow create: if autenticado()
+        && request.resource.data.usuarioId == request.auth.uid;
+
+      allow read, delete: if autenticado()
+        && resource.data.usuarioId == request.auth.uid;
+
+      allow update: if autenticado()
+        && resource.data.usuarioId == request.auth.uid
+        && request.resource.data.usuarioId == request.auth.uid;
+    }
+
+    match /resenas/{resenaId} {
+      allow read: if true;
+
+      allow create: if autenticado()
+        && request.resource.data.keys().hasOnly([
+          'restauranteId',
+          'restaurante',
+          'usuarioId',
+          'autor',
+          'calificacion',
+          'comentario',
+          'creadoEn'
+        ])
+        && request.resource.data.keys().hasAll([
+          'restauranteId',
+          'restaurante',
+          'usuarioId',
+          'autor',
+          'calificacion',
+          'comentario',
+          'creadoEn'
+        ])
+        && request.resource.data.usuarioId == request.auth.uid
+        && (request.resource.data.restauranteId is int
+          || request.resource.data.restauranteId is string)
+        && request.resource.data.restaurante is string
+        && request.resource.data.autor is string
+        && request.resource.data.calificacion is int
+        && request.resource.data.calificacion >= 1
+        && request.resource.data.calificacion <= 5
+        && request.resource.data.comentario is string
+        && request.resource.data.comentario.size() <= 1000
+        && request.resource.data.creadoEn is timestamp;
+    }
+
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

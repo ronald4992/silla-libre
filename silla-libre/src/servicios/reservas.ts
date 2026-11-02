@@ -1,4 +1,5 @@
 export interface DatosReserva {
+  usuarioId: string;
   restaurante: string;
   fecha: string;
   hora: string;

@@ -200,8 +200,15 @@ async function eliminarCuentaAdministrador(uid: string, administradorUid: string
     .get();
   const idsRestaurantes = new Set(restaurantes.docs.map((restaurante) => restaurante.id));
   const ids = [...idsRestaurantes];
-  const [reservasPropias, reseñasPropias, reservasRestaurantes, reseñasRestaurantes, ocupaciones] =
-    await Promise.all([
+  const [
+    reservasPropias,
+    reservasPropiasAntiguas,
+    reseñasPropias,
+    reservasRestaurantes,
+    reseñasRestaurantes,
+    ocupaciones,
+  ] = await Promise.all([
+      baseDatos.collection("reservas").where("usuarioId", "==", uid).get(),
       baseDatos.collection("reservas").where("usuario", "==", uid).get(),
       baseDatos.collection("resenas").where("usuarioId", "==", uid).get(),
       Promise.all(
@@ -221,14 +228,18 @@ async function eliminarCuentaAdministrador(uid: string, administradorUid: string
       ),
     ]);
   const reservas = new Map(
-    [...reservasPropias.docs, ...reservasRestaurantes.flatMap((grupo) => grupo.docs)]
+    [
+      ...reservasPropias.docs,
+      ...reservasPropiasAntiguas.docs,
+      ...reservasRestaurantes.flatMap((grupo) => grupo.docs),
+    ]
       .map((reserva) => [reserva.id, reserva] as const),
   );
   const idsReservas = [...reservas.values()];
   const reservasDeOtrosRestaurantes = idsReservas.filter((reserva) => {
     const datos = reserva.data();
     return (
-      datos.usuario === uid &&
+      (datos.usuarioId === uid || datos.usuario === uid) &&
       typeof datos.turnoId === "string" &&
       typeof datos.restauranteId === "string" &&
       !idsRestaurantes.has(datos.restauranteId)

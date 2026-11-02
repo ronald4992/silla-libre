@@ -134,6 +134,15 @@ comensal se guarda como documentos de `reservas` asociados a su UID y se
 consulta en el perfil, junto con las reservas locales; requiere reglas que
 permitan al usuario leer y gestionar únicamente sus propios documentos.
 
+### Reseñas
+
+Las reglas de Firestore para la colección `resenas` están en
+[`firestore.rules`](./firestore.rules). Para aplicarlas, copia el contenido
+completo del archivo en **Firebase Console → Firestore Database → Rules** y
+publícalo. El bloque permite consultar reseñas públicamente y crear reseñas
+solo a usuarios autenticados, asociadas a su UID y con calificación y longitud
+de comentario validadas; no concede permisos para editar o borrar reseñas.
+
 ### Disponibilidad de mesas
 
 Cada restaurante registrado aparece en la búsqueda pública. Su propietario
@@ -142,8 +151,10 @@ específicas no disponibles. La disponibilidad se publica en
 `restaurantesPublicos/{id}` y se actualiza en vivo con Firestore. Las reservas
 usan transacciones sobre `ocupacionTurnos/{restauranteId_fecha_hora}` para
 contabilizar una mesa y evitar superar la capacidad cuando varias personas
-reservan a la vez. Los documentos privados del restaurante conservan los
-ajustes para sincronizar el panel.
+reservan a la vez. Aunque se pueden elegir horas de llegada en intervalos de
+15 minutos, la capacidad de mesas continúa contabilizándose por hora. Los
+documentos privados del restaurante conservan los ajustes para sincronizar el
+panel.
 
 Configura reglas de Firestore para permitir lectura pública únicamente de los
 campos de `restaurantesPublicos`, escritura solo al propietario autenticado,

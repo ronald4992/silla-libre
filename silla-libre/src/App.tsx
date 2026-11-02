@@ -55,7 +55,7 @@ import {
   type DatosReserva,
 } from "./servicios/reservas";
 
-type Pestaña = "inicio" | "restaurantes" | "reservas" | "perfil";
+type Pestaña = "inicio" | "restaurantes" | "faq";
 type TipoCuenta = "usuario" | "restaurante";
 interface PlatoMenu {
   id: string;
@@ -123,7 +123,7 @@ function FormularioPerfil({
   cargando: boolean;
 }) {
   return (
-    <div className="perfil-grid">
+    <div className="perfil-grid" id="perfil-datos">
       <aside className="perfil-identidad">
         <div className="avatar-grande">
           {foto ? <img src={foto} alt="Foto de perfil" /> : (nombre || usuario.email || "U").slice(0, 1).toUpperCase()}
@@ -239,7 +239,7 @@ function ReservasUsuario({
   cargando: boolean;
 }) {
   return (
-    <section className="reservas-usuario">
+    <section className="reservas-usuario" id="perfil-reservas">
       <div className="titulo-estadistica">
         <span>Historial de reservas</span>
         <small>Consulta tus reservas pasadas y próximas</small>
@@ -348,11 +348,9 @@ function DetalleRestaurante({
         } else if (vigente) {
           setResenas(leerResenasLocales(restaurante.id));
         }
-      } catch {
+      } catch (error) {
         if (vigente) {
-          setMensajeResena(
-            "No pudimos cargar las reseñas. Revisa tu conexión e inténtalo de nuevo.",
-          );
+          setMensajeResena(mensajeErrorResena(error, "leer"));
         }
       } finally {
         if (vigente) setResenasCargando(false);
@@ -421,10 +419,8 @@ function DetalleRestaurante({
           ? "Tu reseña se publicó correctamente."
           : "Tu reseña se guardó en este dispositivo.",
       );
-    } catch {
-      setMensajeResena(
-        "No pudimos publicar tu reseña. Revisa tu conexión e inténtalo de nuevo.",
-      );
+    } catch (error) {
+      setMensajeResena(mensajeErrorResena(error, "publicar"));
     } finally {
       setResenaEnviando(false);
     }
@@ -653,7 +649,7 @@ function DetalleRestaurante({
                 Hora
                 <input
                   type="time"
-                  step={3600}
+                  step={900}
                   value={seleccionReserva.hora}
                   min={
                     restaurante.id === 1
@@ -737,6 +733,30 @@ interface ResenaRestaurante {
   calificacion: number;
   comentario: string;
   creadoEn: string;
+}
+
+function mensajeErrorResena(
+  error: unknown,
+  accion: "leer" | "publicar",
+): string {
+  if (error instanceof FirebaseError) {
+    if (error.code === "permission-denied") {
+      return accion === "publicar"
+        ? "Firestore rechazó la reseña. En Firebase Console, revisa las reglas para permitir que usuarios autenticados creen documentos en la colección «resenas»."
+        : "Firestore no permite consultar las reseñas. En Firebase Console, revisa las reglas de lectura de la colección «resenas».";
+    }
+    if (
+      error.code === "unavailable" ||
+      error.code === "network-request-failed" ||
+      error.code === "deadline-exceeded"
+    ) {
+      return "No pudimos conectar con Firestore. Revisa tu conexión e inténtalo de nuevo.";
+    }
+    return `No pudimos ${accion === "leer" ? "cargar" : "publicar"} la reseña (Firebase: ${error.code}).`;
+  }
+  return accion === "leer"
+    ? "No pudimos cargar las reseñas. Inténtalo de nuevo."
+    : "No pudimos publicar tu reseña. Inténtalo de nuevo.";
 }
 
 function normalizarResena(
@@ -1587,26 +1607,41 @@ function separarNombreCompleto(nombre: string): { nombre: string; apellido: stri
     apellido: partes.join(" "),
   };
 }
-function leerReservasGuardadas(uid: string | null, correo?: string): ReservaPerfil[] {
-  const guardado =
-    (uid ? localStorage.getItem(`silla-libre-reservas-${uid}`) : null) ??
-    localStorage.getItem("silla-libre-reservas");
+function leerReservasGuardadas(uid: string, correo?: string): ReservaPerfil[] {
+  const guardado = localStorage.getItem(`silla-libre-reservas-${uid}`);
   if (!guardado) return [];
   try {
     const datos: unknown = JSON.parse(guardado);
     if (!Array.isArray(datos)) return [];
-    return datos.filter(
-      (reserva): reserva is ReservaPerfil =>
-        Boolean(
-          reserva &&
-            typeof reserva === "object" &&
-            typeof reserva.restaurante === "string" &&
-            typeof reserva.fecha === "string" &&
-            typeof reserva.hora === "string" &&
-            typeof reserva.personas === "number" &&
-            (!correo || reserva.correo === correo),
-        ),
-    );
+    return datos.flatMap((reserva): ReservaPerfil[] => {
+      if (!reserva || typeof reserva !== "object") return [];
+      const dato = reserva as Record<string, unknown>;
+      if (
+        typeof dato.restaurante !== "string" ||
+        typeof dato.fecha !== "string" ||
+        typeof dato.hora !== "string" ||
+        typeof dato.personas !== "number" ||
+        typeof dato.correo !== "string" ||
+        (correo && dato.correo !== correo) ||
+        (typeof dato.usuarioId === "string" && dato.usuarioId !== uid)
+      ) {
+        return [];
+      }
+      return [{
+        id: typeof dato.id === "string" ? dato.id : undefined,
+        usuarioId:
+          typeof dato.usuarioId === "string" ? dato.usuarioId : uid,
+        restaurante: dato.restaurante,
+        fecha: dato.fecha,
+        hora: dato.hora,
+        personas: dato.personas,
+        correo: dato.correo,
+        estado: typeof dato.estado === "string" ? dato.estado : undefined,
+        restauranteId:
+          typeof dato.restauranteId === "string" ? dato.restauranteId : undefined,
+        turnoId: typeof dato.turnoId === "string" ? dato.turnoId : undefined,
+      }];
+    });
   } catch {
     return [];
   }
@@ -1644,6 +1679,12 @@ function normalizarReserva(
   }
   return {
     id,
+    usuarioId:
+      typeof datos.usuarioId === "string"
+        ? datos.usuarioId
+        : typeof datos.usuario === "string"
+          ? datos.usuario
+          : "",
     restaurante: datos.restaurante,
     fecha: datos.fecha,
     hora: datos.hora,
@@ -2261,6 +2302,8 @@ function App() {
       autenticacion,
       (usuarioAutenticado) => {
         setUsuario(usuarioAutenticado);
+        setCorreo("");
+        setContraseña("");
         setFavoritos(
           usuarioAutenticado
             ? leerFavoritosGuardados(usuarioAutenticado.uid)
@@ -2392,7 +2435,7 @@ function App() {
           getDocs(
             query(
               collection(db, "reservas"),
-              where("usuario", "==", usuario.uid),
+              where("usuarioId", "==", usuario.uid),
             ),
           ),
         ]);
@@ -2777,15 +2820,13 @@ function App() {
     }
   };
   const navegar = (destino: Pestaña) => {
-    if (destino === "perfil") {
-      irAlPerfil();
-      return;
-    }
     setPestaña(destino);
     document.getElementById(destino)?.scrollIntoView({ behavior: "smooth" });
   };
   const cerrarSesion = async () => {
     if (autenticacion) await signOut(autenticacion);
+    setCorreo("");
+    setContraseña("");
     irAInicio();
   };
   const recuperarContraseña = async () => {
@@ -2900,7 +2941,7 @@ function App() {
               await getDocs(
                 query(
                   collection(db, "reservas"),
-                  where("usuario", "==", usuario.uid),
+                  where("usuarioId", "==", usuario.uid),
                 ),
               ),
             ];
@@ -3616,6 +3657,10 @@ function App() {
     restaurante = restaurantes[0],
     datosIniciales?: Partial<FormularioReserva>,
   ) => {
+    if (!usuario) {
+      mostrarAcceso();
+      return;
+    }
     const restauranteActual = restaurantesVisibles.find(
       (actual) => String(actual.id) === String(restaurante.id),
     );
@@ -3629,6 +3674,18 @@ function App() {
   };
   const confirmarReserva = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
+    if (!usuario) {
+      setModal("acceso");
+      setEsRegistro(false);
+      setMensaje("Inicia sesión o crea una cuenta para realizar una reserva.");
+      return;
+    }
+    const partesHora = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(reserva.hora);
+    const minutosReserva = Number(partesHora?.[2]);
+    if (!partesHora || minutosReserva % 15 !== 0) {
+      setMensaje("Selecciona una hora en intervalos de 15 minutos.");
+      return;
+    }
     const horarioRestaurante =
       restauranteActivo.id === 1
         ? { apertura: "12:30", nombre: "Osaka Nikkei" }
@@ -3652,8 +3709,7 @@ function App() {
       turnoSuscritoId === turnoSeleccionadoId ? mesasOcupadasTurno : 0;
     if (
       disponibilidad &&
-      (reserva.hora.slice(3) !== "00" ||
-        disponibilidad.diasNoDisponibles.includes(
+      (disponibilidad.diasNoDisponibles.includes(
           new Date(`${reserva.fecha}T12:00:00`).getDay(),
         ) ||
         disponibilidad.fechasNoDisponibles.includes(reserva.fecha))
@@ -3672,11 +3728,12 @@ function App() {
       return;
     }
     const datos: DatosReserva = {
+      usuarioId: usuario.uid,
       restaurante: restauranteActivo.nombre,
       fecha: reserva.fecha,
       hora: reserva.hora,
       personas: Number(reserva.personas),
-      correo: usuario?.email ?? correo,
+      correo: usuario.email ?? correo,
     };
     setCargando(true);
     setMensaje("");
@@ -3731,7 +3788,6 @@ function App() {
             ...datos,
             restauranteId: disponibilidad.id,
             turnoId,
-            usuario: usuario?.uid ?? "invitado",
             estado: "Confirmada",
             creadoEn: serverTimestamp(),
           });
@@ -3741,7 +3797,6 @@ function App() {
         const reservaCreada = await addDoc(collection(baseDatos, "reservas"), {
           ...datos,
           restauranteId: String(restauranteActivo.id),
-          usuario: usuario?.uid ?? "invitado",
           estado: "Confirmada",
           creadoEn: serverTimestamp(),
         });
@@ -3754,20 +3809,12 @@ function App() {
         turnoId,
         estado: "Confirmada",
       };
-      if (usuario) {
-        const reservasActualizadas = [...reservasPerfil, reservaGuardada];
-        setReservasPerfil(reservasActualizadas);
-        localStorage.setItem(
-          `silla-libre-reservas-${usuario.uid}`,
-          JSON.stringify(reservasActualizadas),
-        );
-      } else {
-        const reservasInvitado = leerReservasGuardadas(null, correo);
-        localStorage.setItem(
-          "silla-libre-reservas",
-          JSON.stringify([...reservasInvitado, reservaGuardada]),
-        );
-      }
+      const reservasActualizadas = [...reservasPerfil, reservaGuardada];
+      setReservasPerfil(reservasActualizadas);
+      localStorage.setItem(
+        `silla-libre-reservas-${usuario.uid}`,
+        JSON.stringify(reservasActualizadas),
+      );
       crearEventoCalendario(datos);
       await avisarReserva(datos).catch(() => undefined);
       setReserva(reservaInicial);
@@ -4023,16 +4070,10 @@ function App() {
             Explorar
           </button>
           <button
-            className={pestaña === "reservas" ? "activo" : ""}
-            onClick={() => navegar("reservas")}
+            className={pestaña === "faq" ? "activo" : ""}
+            onClick={() => navegar("faq")}
           >
-            Mis reservas
-          </button>
-          <button
-            className={vista !== "inicio" ? "activo" : ""}
-            onClick={() => (usuario ? navegar("perfil") : mostrarAcceso())}
-          >
-            Mi perfil
+            FAQ
           </button>
         </nav>}
         <div className="acciones-navegacion">
@@ -4292,13 +4333,32 @@ function App() {
                   </p>
                   <p>{restaurante.descripcion}</p>
                   <div className="acciones-tarjeta">
-                    <button
-                      className="boton boton-vino"
-                      type="button"
-                      onClick={() => abrirReserva(restaurante)}
-                    >
-                      Reservar mesa
-                    </button>
+                    {usuario ? (
+                      <button
+                        className="boton boton-vino"
+                        type="button"
+                        onClick={() => abrirReserva(restaurante)}
+                      >
+                        Reservar mesa
+                      </button>
+                    ) : (
+                      <div className="acciones-acceso-tarjeta">
+                        <button
+                          className="boton boton-vino"
+                          type="button"
+                          onClick={() => mostrarAcceso()}
+                        >
+                          Iniciar sesión
+                        </button>
+                        <button
+                          className="boton boton-dorado"
+                          type="button"
+                          onClick={() => mostrarAcceso(true)}
+                        >
+                          Registrarse
+                        </button>
+                      </div>
+                    )}
                     {restaurante.urlreserva && (
                       <a
                         className="reservar-enlace"
@@ -4386,6 +4446,15 @@ function App() {
                 </div>
               )}
             </div>
+            {usuario && vista === "perfil-usuario" && (
+              <nav
+                className="navegacion-perfil-usuario"
+                aria-label="Secciones del perfil"
+              >
+                <a href="#perfil-reservas">Mis reservas</a>
+                <a href="#perfil-datos">Mi perfil</a>
+              </nav>
+            )}
             {autenticacionCargando ? (
               <p className="aviso perfil-aviso">Cargando tu perfil...</p>
             ) : !usuario ? (
@@ -4571,6 +4640,63 @@ function App() {
             {mensaje && <p className="mensaje-modal perfil-mensaje" role="status">{mensaje}</p>}
           </section>
         )}
+        {vista === "inicio" && (
+          <section className="faq-seccion" id="faq" aria-labelledby="titulo-faq">
+            <div className="faq-contenido">
+              <p className="sobretitulo oscuro">RESOLVEMOS TUS DUDAS</p>
+              <h2 id="titulo-faq">Preguntas <em>frecuentes.</em></h2>
+              <div className="faq-lista">
+                {[
+                  [
+                    "¿Qué es Silla Libre?",
+                    "Silla Libre es una plataforma web que permite a los usuarios descubrir restaurantes de alta cocina en Bogotá, consultar su información y realizar reservas de manera fácil y rápida.",
+                  ],
+                  [
+                    "¿Cómo puedo realizar una reserva en Silla Libre?",
+                    "Debes ingresar a la plataforma, seleccionar el restaurante de tu preferencia, consultar la disponibilidad y elegir la fecha y hora que deseas reservar.",
+                  ],
+                  [
+                    "¿Es necesario registrarse para realizar una reserva?",
+                    "Sí, es necesario contar con una cuenta de usuario para acceder a las funcionalidades de reserva y gestionar tus solicitudes.",
+                  ],
+                  [
+                    "¿Puedo consultar la ubicación de los restaurantes?",
+                    "Sí, puedes consultar la ubicación de los restaurantes mediante un mapa integrado con Google Maps.",
+                  ],
+                  [
+                    "¿Cómo puedo cancelar una reserva?",
+                    "Puedes gestionar la cancelación de tu reserva desde las opciones disponibles en tu cuenta, teniendo en cuenta las condiciones establecidas por cada restaurante.",
+                  ],
+                  [
+                    "¿Cómo puedo saber si mi reserva fue confirmada?",
+                    "Una vez realizada la solicitud, podrás consultar el estado de tu reserva desde la plataforma y recibir una notificación de confirmación, según las funcionalidades habilitadas.",
+                  ],
+                  [
+                    "¿Los restaurantes también pueden registrarse en Silla Libre?",
+                    "Sí, los restaurantes pueden crear una cuenta y registrar información como su nombre, dirección, tipo de comida y documentación sanitaria requerida.",
+                  ],
+                  [
+                    "¿Qué hago si no encuentro disponibilidad en el restaurante que quiero visitar?",
+                    "Puedes consultar otras fechas u horarios disponibles o explorar otros restaurantes publicados en la plataforma.",
+                  ],
+                  [
+                    "¿Silla Libre tiene algún costo por realizar reservas?",
+                    "La plataforma está diseñada para facilitar el proceso de reserva. Los posibles costos adicionales dependerán de las políticas de cada restaurante.",
+                  ],
+                  [
+                    "¿Cómo puedo contactar con el equipo de Silla Libre si tengo un problema?",
+                    "Puedes comunicarte con el equipo de soporte mediante los canales de contacto habilitados en la plataforma.",
+                  ],
+                ].map(([pregunta, respuesta]) => (
+                  <details className="faq-item" key={pregunta}>
+                    <summary>{pregunta}</summary>
+                    <p>{respuesta}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
       </main>
       <footer>
         <span className="marca-footer">Silla Libre</span>
@@ -4716,6 +4842,7 @@ function App() {
                     Correo electrónico
                     <input
                       type="email"
+                      autoComplete={esRegistro ? "email" : "username"}
                       value={correo}
                       onChange={(e) => setCorreo(e.target.value)}
                       required
@@ -4726,6 +4853,9 @@ function App() {
                     Contraseña
                     <input
                       type="password"
+                      autoComplete={
+                        esRegistro ? "new-password" : "current-password"
+                      }
                       minLength={6}
                       value={contraseña}
                       onChange={(e) => setContraseña(e.target.value)}
@@ -4835,7 +4965,7 @@ function App() {
                       Hora
                       <input
                         type="time"
-                        step={3600}
+                        step={900}
                         value={reserva.hora}
                         min={
                           restauranteActivo.id === 1
@@ -4860,6 +4990,7 @@ function App() {
                       {restauranteActivo.id === 2 && (
                         <small>Horario de DonDoh Bogotá: 12:00 p. m. – 11:00 p. m.</small>
                       )}
+                      <small>Horarios disponibles cada 15 minutos.</small>
                       {disponibilidadActiva && (
                         <small
                           className={
@@ -4872,12 +5003,12 @@ function App() {
                           {fechaBloqueada
                             ? "El restaurante no abre en la fecha seleccionada."
                             : !reserva.fecha || !reserva.hora
-                              ? `${disponibilidadActiva.mesasPorTurno} mesas por turno.`
+                              ? `${disponibilidadActiva.mesasPorTurno} mesas disponibles por hora.`
                               : turnoSinMesas
-                                ? "Turno completo; no quedan mesas."
+                                ? "No quedan mesas disponibles en esta hora."
                                 : `${mesasRestantes} ${
                                     mesasRestantes === 1 ? "mesa disponible" : "mesas disponibles"
-                                  } en tiempo real.`}
+                                  } en esta hora.`}
                         </small>
                       )}
                     </label>
