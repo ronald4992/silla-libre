@@ -20,7 +20,30 @@ service cloud.firestore {
 
     match /restaurantes/{restauranteId} {
       allow read: if true;
-      allow create, update, delete: if esAdministrador();
+      allow create, delete: if esAdministrador();
+
+      allow update: if esAdministrador()
+        || (
+          autenticado()
+          && resource.data.propietario == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['menu', 'menuPdfUrl', 'menuPdfNombre'])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['menu'])
+            || request.resource.data.menu is list
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['menuPdfUrl'])
+            || request.resource.data.menuPdfUrl is string
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['menuPdfNombre'])
+            || request.resource.data.menuPdfNombre is string
+          )
+        );
     }
 
     match /reservas/{reservaId} {

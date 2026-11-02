@@ -163,6 +163,18 @@ según el rol correspondiente. Sin estas reglas, la aplicación no puede
 publicar negocios ni confirmar turnos en Firebase. Las fichas de muestra
 estáticas no tienen propietario y no administran disponibilidad.
 
+### Menús de restaurante
+
+Para guardar platos y subir el menú en PDF o Word, publica las reglas de
+[`firestore.rules`](./firestore.rules) en **Firestore Database → Rules** y las
+de [`storage.rules`](./storage.rules) en **Storage → Rules**. Firestore permite
+al propietario modificar únicamente los campos del menú; Storage limita la
+carga a archivos `menu.pdf`, `menu.doc` o `menu.docx` de hasta 10 MB bajo la
+ruta de su UID y comprueba la propiedad del restaurante. Las reglas de Storage
+también contemplan las fotos de perfil y certificados que usa la aplicación.
+Al actualizar reglas existentes, integra estos bloques sin eliminar permisos
+necesarios para otras funciones.
+
 ## Desplegar en Netlify
 
 La configuración de [`netlify.toml`](../netlify.toml) establece la aplicación

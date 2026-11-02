@@ -971,6 +971,7 @@ function PanelRestaurante({
   guardarMenu,
   subirMenuArchivo,
   progresoMenu,
+  errorMenu,
   cancelarReserva,
   guardarDisponibilidad,
   cargando,
@@ -993,6 +994,7 @@ function PanelRestaurante({
   guardarMenu: (restauranteId: string) => void;
   subirMenuArchivo: (restauranteId: string, archivo: File) => void;
   progresoMenu: Record<string, number>;
+  errorMenu: Record<string, string>;
   cancelarReserva: (reserva: ReservaPerfil) => void;
   guardarDisponibilidad: (
     id: string,
@@ -1149,7 +1151,10 @@ function PanelRestaurante({
             {progresoMenu[restaurante.id] !== undefined && (
               <div className="progreso-menu" role="status" aria-live="polite">
                 {progresoMenu[restaurante.id] < 0 ? (
-                  <span>No se pudo guardar el archivo. Intenta subirlo de nuevo.</span>
+                  <span>
+                    {errorMenu[restaurante.id] ||
+                      "No se pudo guardar el archivo. Intenta subirlo de nuevo."}
+                  </span>
                 ) : progresoMenu[restaurante.id] < 100 ? (
                   <>
                     <progress
@@ -2264,6 +2269,7 @@ function App() {
     RestaurantePropietario[]
   >([]);
   const [progresoMenu, setProgresoMenu] = useState<Record<string, number>>({});
+  const [errorMenu, setErrorMenu] = useState<Record<string, string>>({});
   const [reserva, setReserva] = useState<FormularioReserva>(reservaInicial);
   const [restauranteActivo, setRestauranteActivo] = useState(restaurantes[0]);
   const [busqueda, setBusqueda] = useState("");
@@ -3515,6 +3521,7 @@ function App() {
     }
   };
   const subirMenuArchivo = async (restauranteId: string, archivo: File) => {
+    setErrorMenu((actual) => ({ ...actual, [restauranteId]: "" }));
     if (!usuario) {
       setMensaje("Inicia sesión con una cuenta de restaurante para subir el menú.");
       return;
@@ -3526,17 +3533,24 @@ function App() {
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     };
     if (!extension || !(extension in tiposArchivo)) {
-      setMensaje("El menú debe ser un archivo PDF o Word (.doc, .docx).");
+      const error = "El menú debe ser un archivo PDF o Word (.doc, .docx).";
+      setMensaje(error);
+      setErrorMenu((actual) => ({ ...actual, [restauranteId]: error }));
       setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
       return;
     }
     if (archivo.size > 10 * 1024 * 1024) {
-      setMensaje("El archivo del menú debe pesar 10 MB o menos.");
+      const error = "El archivo del menú debe pesar 10 MB o menos.";
+      setMensaje(error);
+      setErrorMenu((actual) => ({ ...actual, [restauranteId]: error }));
       setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
       return;
     }
     if (!almacenamiento || !baseDatos) {
-      setMensaje("Firebase Storage y Firestore deben estar configurados para subir el menú.");
+      const error =
+        "Firebase Storage y Firestore deben estar configurados para subir el menú.";
+      setMensaje(error);
+      setErrorMenu((actual) => ({ ...actual, [restauranteId]: error }));
       setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
       return;
     }
@@ -3577,11 +3591,20 @@ function App() {
       setProgresoMenu((actual) => ({ ...actual, [restauranteId]: 100 }));
     } catch (error) {
       setProgresoMenu((actual) => ({ ...actual, [restauranteId]: -1 }));
-      setMensaje(
-        error instanceof Error
-          ? `No se pudo guardar el menú: ${error.message}`
-          : "No se pudo guardar el menú. Revisa la conexión y las reglas de Firebase.",
-      );
+      const detalle =
+        error instanceof FirebaseError && error.code === "storage/unauthorized"
+          ? "Storage denegó el archivo. Publica las reglas de storage.rules y verifica que seas propietario del restaurante."
+          : error instanceof FirebaseError &&
+              error.code === "permission-denied"
+            ? "Firestore denegó guardar el menú o su enlace. Publica las reglas de firestore.rules."
+            : error instanceof FirebaseError &&
+                error.code === "storage/bucket-not-found"
+              ? "No se encontró el bucket de Firebase Storage. Verifica VITE_FIREBASE_STORAGE_BUCKET."
+              : error instanceof Error
+                ? error.message
+                : "Revisa la conexión y las reglas de Firebase.";
+      setErrorMenu((actual) => ({ ...actual, [restauranteId]: detalle }));
+      setMensaje(`No se pudo guardar el menú: ${detalle}`);
     } finally {
       setCargando(false);
     }
@@ -4485,6 +4508,7 @@ function App() {
                   void subirMenuArchivo(restauranteId, archivo)
                 }
                 progresoMenu={progresoMenu}
+                errorMenu={errorMenu}
                 cancelarReserva={(reserva) => void cancelarReserva(reserva)}
                 guardarDisponibilidad={(id, configuracion) =>
                   void guardarDisponibilidad(id, configuracion)
@@ -4705,6 +4729,49 @@ function App() {
           <strong>Contáctenos</strong>
           <a href="mailto:essillalibre@gmail.com">essillalibre@gmail.com</a>
         </div>
+        <nav className="redes-footer" aria-label="Redes sociales de Silla Libre">
+          <a
+            href="https://www.instagram.com/essillalibre/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect
+                x="3"
+                y="3"
+                width="18"
+                height="18"
+                rx="5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <circle cx="17.5" cy="6.5" r="1.25" fill="currentColor" />
+            </svg>
+            <span>Instagram</span>
+          </a>
+          <a
+            href="https://www.facebook.com/profile.php?id=61595883822560"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M13.5 21v-8h2.7l.4-3.1h-3.1v-2c0-.9.3-1.5 1.6-1.5h1.7V3.6c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.1H7.3V13h2.8v8h3.4Z"
+              />
+            </svg>
+            <span>Facebook</span>
+          </a>
+        </nav>
         <span>Esta aplicación fue creada por Ronald Lopez y Andres Castillo.</span>
         <span>© 2026 Silla Libre</span>
       </footer>

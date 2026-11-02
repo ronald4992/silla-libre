@@ -1,0 +1,49 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function autenticadoComo(usuarioId) {
+      return request.auth != null && request.auth.uid == usuarioId;
+    }
+
+    function propietarioDelRestaurante(usuarioId, restauranteId) {
+      return autenticadoComo(usuarioId)
+        && firestore.get(
+          /databases/(default)/documents/restaurantes/$(restauranteId)
+        ).data.propietario == usuarioId;
+    }
+
+    match /perfiles/{usuarioId}/{archivo} {
+      allow read: if autenticadoComo(usuarioId);
+      allow create, update: if autenticadoComo(usuarioId)
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if autenticadoComo(usuarioId);
+    }
+
+    match /certificados/{usuarioId}/{archivo} {
+      allow read: if autenticadoComo(usuarioId);
+      allow create, update: if autenticadoComo(usuarioId)
+        && request.resource.size <= 10 * 1024 * 1024
+        && (
+          request.resource.contentType == 'application/pdf'
+          || request.resource.contentType.matches('image/.*')
+        );
+      allow delete: if autenticadoComo(usuarioId);
+    }
+
+    match /menus/{usuarioId}/{restauranteId}/{archivo} {
+      allow read: if true;
+      allow create, update: if propietarioDelRestaurante(
+          usuarioId,
+          restauranteId
+        )
+        && request.resource.size <= 10 * 1024 * 1024
+        && (
+          archivo == 'menu.pdf'
+          || archivo == 'menu.doc'
+          || archivo == 'menu.docx'
+        );
+      allow delete: if autenticadoComo(usuarioId);
+    }
+  }
+}
