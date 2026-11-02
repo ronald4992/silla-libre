@@ -3271,6 +3271,18 @@ function App() {
           window.history.pushState({}, "", "/perfil/usuario");
           setVista("perfil-usuario");
         }
+        try {
+          await sendEmailVerification(credencial.user);
+          mensajeCreacion += ` Enviamos un correo de verificación a ${credencial.user.email ?? correo}.`;
+        } catch (error) {
+          const detalle =
+            error instanceof FirebaseError
+              ? mensajeErrorAcceso(error)
+              : error instanceof Error
+                ? error.message
+                : "Error desconocido.";
+          mensajeCreacion += ` No pudimos enviar el correo de verificación: ${detalle}`;
+        }
         setModal(null);
         setMensaje(mensajeCreacion);
       } else {

@@ -91,6 +91,10 @@ adicionales en el código:
 
 Google está habilitado para cuentas de comensal. Las cuentas de restaurante
 siguen utilizando su registro con los datos y el certificado requeridos.
+Al crear una cuenta con correo y contraseña, Firebase envía un mensaje de
+verificación al correo registrado. Puedes personalizarlo en
+**Authentication → Templates → Email address verification**; si el envío falla,
+la aplicación lo indicará aunque la cuenta ya haya sido creada.
 
 ## Panel de administración
 
