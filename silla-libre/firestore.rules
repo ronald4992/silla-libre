@@ -19,15 +19,86 @@ service cloud.firestore {
     }
 
     match /restaurantes/{restauranteId} {
-      allow read: if true;
-      allow create, delete: if esAdministrador();
+      allow read: if esAdministrador()
+        || (
+          autenticado()
+          && resource.data.propietario == request.auth.uid
+        );
+
+      allow create: if esAdministrador()
+        || (
+          autenticado()
+          && request.resource.data.propietario == request.auth.uid
+          && request.resource.data.estado == 'pendiente'
+          && request.resource.data.keys().hasOnly([
+            'nombre',
+            'direccion',
+            'comida',
+            'certificado',
+            'propietario',
+            'correoPropietario',
+            'estado',
+            'menu',
+            'menuPdfUrl',
+            'menuPdfNombre',
+            'mesasPorTurno',
+            'diasNoDisponibles',
+            'fechasNoDisponibles',
+            'creadoEn'
+          ])
+          && request.resource.data.keys().hasAll([
+            'nombre',
+            'direccion',
+            'comida',
+            'certificado',
+            'propietario',
+            'correoPropietario',
+            'estado',
+            'menu',
+            'menuPdfUrl',
+            'menuPdfNombre',
+            'mesasPorTurno',
+            'diasNoDisponibles',
+            'fechasNoDisponibles',
+            'creadoEn'
+          ])
+          && request.resource.data.nombre is string
+          && request.resource.data.direccion is string
+          && request.resource.data.comida is string
+          && request.resource.data.certificado is string
+          && request.resource.data.correoPropietario is string
+          && request.resource.data.menu is list
+          && request.resource.data.menuPdfUrl is string
+          && request.resource.data.menuPdfNombre is string
+          && request.resource.data.mesasPorTurno is int
+          && request.resource.data.diasNoDisponibles is list
+          && request.resource.data.fechasNoDisponibles is list
+          && request.resource.data.creadoEn is timestamp
+        );
+
+      allow delete: if esAdministrador()
+        || (
+          autenticado()
+          && resource.data.propietario == request.auth.uid
+        );
 
       allow update: if esAdministrador()
         || (
           autenticado()
           && resource.data.propietario == request.auth.uid
+          && (
+            resource.data.estado == 'aprobado'
+            || !resource.data.keys().hasAny(['estado'])
+          )
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['menu', 'menuPdfUrl', 'menuPdfNombre'])
+            .hasOnly([
+              'menu',
+              'menuPdfUrl',
+              'menuPdfNombre',
+              'mesasPorTurno',
+              'diasNoDisponibles',
+              'fechasNoDisponibles'
+            ])
           && (
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['menu'])
@@ -44,6 +115,43 @@ service cloud.firestore {
             || request.resource.data.menuPdfNombre is string
           )
         );
+    }
+
+    match /restaurantesPublicos/{restauranteId} {
+      allow read: if true;
+
+      allow create: if esAdministrador();
+
+      allow delete: if esAdministrador()
+        || (
+          autenticado()
+          && resource.data.propietario == request.auth.uid
+        );
+
+      allow update: if autenticado()
+        && exists(
+          /databases/$(database)/documents/restaurantes/$(restauranteId)
+        )
+        && get(
+          /databases/$(database)/documents/restaurantes/$(restauranteId)
+        ).data.propietario == request.auth.uid
+        && (
+          get(
+            /databases/$(database)/documents/restaurantes/$(restauranteId)
+          ).data.estado == 'aprobado'
+          || !get(
+            /databases/$(database)/documents/restaurantes/$(restauranteId)
+          ).data.keys().hasAny(['estado'])
+        )
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'mesasPorTurno',
+            'diasNoDisponibles',
+            'fechasNoDisponibles'
+          ])
+        && request.resource.data.mesasPorTurno is int
+        && request.resource.data.diasNoDisponibles is list
+        && request.resource.data.fechasNoDisponibles is list;
     }
 
     match /reservas/{reservaId} {

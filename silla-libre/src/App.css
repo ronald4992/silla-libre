@@ -1,0 +1,66 @@
+.admin-solicitudes {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-solicitud {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid #e5dcd1;
+  background: var(--crema);
+}
+
+.admin-solicitud h4 {
+  margin: 0 0 6px;
+  color: var(--vino-profundo);
+  font: 600 18px "Playfair Display", serif;
+}
+
+.admin-solicitud p {
+  margin: 0 0 6px;
+  color: var(--tinta);
+  font-size: 11px;
+}
+
+.admin-solicitud small,
+.admin-solicitud a {
+  display: block;
+  margin-top: 6px;
+  color: var(--gris);
+  font-size: 10px;
+}
+
+.admin-solicitud a {
+  color: var(--vino);
+  font-weight: 600;
+}
+
+.admin-solicitud .boton {
+  flex: 0 0 auto;
+}
+
+.admin-pendiente {
+  padding: 6px 9px;
+  color: #805a13;
+  background: #f5ebdc;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.solicitud-pendiente {
+  margin: 20px 0 0;
+}
+
+@media (max-width: 700px) {
+  .admin-solicitud {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-solicitud .boton {
+    width: 100%;
+  }
+}

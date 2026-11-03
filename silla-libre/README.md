@@ -99,7 +99,10 @@ la aplicación lo indicará aunque la cuenta ya haya sido creada.
 ## Panel de administración
 
 El panel está disponible en `/admin`; muestra las estadísticas de registro
-mensuales y permite administrar cuentas y restaurantes publicados. Para usar
+mensuales, permite administrar cuentas y restaurantes publicados y muestra las
+solicitudes de registro pendientes para que el administrador revise el
+certificado y las apruebe. Al aprobar una solicitud, el servidor publica el
+restaurante en el directorio principal. Para usar
 la gestión de cuentas, configura `VITE_ADMIN_EMAIL` para mostrar el acceso y
 `ADMIN_EMAIL` en el servidor para autorizar operaciones. Ambos deben contener
 el correo administrador. La cuenta debe existir en Firebase Authentication,
@@ -113,7 +116,10 @@ la clave privada de Firebase Admin en variables `VITE_`, en archivos públicos
 ni en el repositorio. `VITE_API_URL` debe apuntar a este servidor; en
 producción, configura también `ORIGEN_FRONTEND` con el origen de la aplicación.
 El servidor valida el token de Firebase y el correo verificado antes de
-devolver cuentas o eliminar una. La eliminación incluye los documentos y
+devolver cuentas, listar solicitudes, aprobar restaurantes o eliminar una
+cuenta. Las solicitudes se guardan en Firestore con estado pendiente; el correo
+configurado en `CORREO_SOLICITUDES` y la cuenta definida en `ADMIN_EMAIL`
+reciben la notificación con el certificado adjunto. La eliminación incluye los documentos y
 archivos asociados y no permite borrar la cuenta administradora.
 
 ### Recuperación y eliminación de cuentas
@@ -149,9 +155,9 @@ de comentario validadas; no concede permisos para editar o borrar reseñas.
 
 ### Disponibilidad de mesas
 
-Cada restaurante registrado aparece en la búsqueda pública. Su propietario
-puede definir mesas por turno de una hora, días semanales de cierre y fechas
-específicas no disponibles. La disponibilidad se publica en
+Solo los restaurantes aprobados por el administrador aparecen en la búsqueda
+pública. Después de la aprobación, su propietario puede definir mesas por turno
+de una hora, días semanales de cierre y fechas específicas no disponibles. La disponibilidad se publica en
 `restaurantesPublicos/{id}` y se actualiza en vivo con Firestore. Las reservas
 usan transacciones sobre `ocupacionTurnos/{restauranteId_fecha_hora}` para
 contabilizar una mesa y evitar superar la capacidad cuando varias personas

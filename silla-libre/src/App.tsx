@@ -44,6 +44,7 @@ import {
 } from "firebase/storage";
 import { restaurantes } from "./datos/restaurante";
 import type { Restaurante } from "./tipos/restaurantes";
+import "./App.css";
 import {
   autenticacion,
   almacenamiento,
@@ -69,6 +70,7 @@ interface RestaurantePropietario {
   direccion: string;
   comida: string;
   certificado: string;
+  estado: "pendiente" | "aprobado";
   menu: PlatoMenu[];
   menuPdfUrl: string;
   menuPdfNombre: string;
@@ -1102,17 +1104,28 @@ function PanelRestaurante({
               <h3>{restaurante.nombre}</h3>
               <p>{restaurante.comida} · {restaurante.direccion}</p>
             </div>
-            <span className="contador">
-              {restaurante.menuPdfUrl ? "Menú cargado" : `${restaurante.menu.length} platos`}
+            <span className={restaurante.estado === "pendiente" ? "admin-pendiente" : "contador"}>
+              {restaurante.estado === "pendiente"
+                ? "Pendiente de aprobación"
+                : restaurante.menuPdfUrl
+                  ? "Menú cargado"
+                  : `${restaurante.menu.length} platos`}
             </span>
           </div>
-          <GestionDisponibilidadRestaurante
-            key={`${restaurante.id}-${restaurante.mesasPorTurno}-${restaurante.diasNoDisponibles.join(",")}-${restaurante.fechasNoDisponibles.join(",")}`}
-            restaurante={restaurante}
-            guardar={guardarDisponibilidad}
-            cargando={cargando}
-          />
-          <div className="menu-admin">
+          {restaurante.estado === "pendiente" && (
+            <p className="aviso solicitud-pendiente" role="status">
+              Recibimos tu solicitud y notificamos al administrador. Tu restaurante
+              aparecerá en la página principal cuando sea aprobado.
+            </p>
+          )}
+          <div hidden={restaurante.estado === "pendiente"}>
+            <GestionDisponibilidadRestaurante
+              key={`${restaurante.id}-${restaurante.mesasPorTurno}-${restaurante.diasNoDisponibles.join(",")}-${restaurante.fechasNoDisponibles.join(",")}`}
+              restaurante={restaurante}
+              guardar={guardarDisponibilidad}
+              cargando={cargando}
+            />
+            <div className="menu-admin">
             <div className="titulo-estadistica">
               <span>Subir menú</span>
               <small>Acepta archivos PDF o Word (.doc, .docx)</small>
@@ -1242,6 +1255,7 @@ function PanelRestaurante({
               >
                 {cargando ? "Guardando..." : "Guardar menú"}
               </button>
+            </div>
             </div>
           </div>
         </section>
@@ -1742,6 +1756,7 @@ function normalizarRestaurante(
     direccion: typeof datos.direccion === "string" ? datos.direccion : "",
     comida: typeof datos.comida === "string" ? datos.comida : "",
     certificado: typeof datos.certificado === "string" ? datos.certificado : "",
+    estado: datos.estado === "pendiente" ? "pendiente" : "aprobado",
     menu,
     menuPdfUrl: typeof datos.menuPdfUrl === "string" ? datos.menuPdfUrl : "",
     menuPdfNombre:
@@ -1844,6 +1859,16 @@ interface DatosAdministracion {
   };
 }
 
+interface SolicitudRestauranteAdministrada {
+  id: string;
+  nombre: string;
+  direccion: string;
+  comida: string;
+  correoPropietario: string;
+  certificado: string;
+  creadoEn: string;
+}
+
 function validarDatosAdministracion(valor: unknown): DatosAdministracion | null {
   if (!valor || typeof valor !== "object") return null;
   const datos = valor as Record<string, unknown>;
@@ -1913,6 +1938,55 @@ async function obtenerDatosAdministracion(usuario: User): Promise<DatosAdministr
   return datos;
 }
 
+async function obtenerSolicitudesRestaurante(
+  usuario: User,
+): Promise<SolicitudRestauranteAdministrada[]> {
+  const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+  if (!apiUrl) {
+    throw new Error("Configura VITE_API_URL para conectar el panel con el servidor.");
+  }
+  const respuesta = await fetch(`${apiUrl}/admin/solicitudes-restaurante`, {
+    headers: { Authorization: `Bearer ${await usuario.getIdToken()}` },
+  });
+  const cuerpo: unknown = await respuesta.json();
+  if (!respuesta.ok) {
+    const mensaje =
+      cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo &&
+      typeof cuerpo.mensaje === "string"
+        ? cuerpo.mensaje
+        : "No se pudieron cargar las solicitudes de restaurantes.";
+    throw new Error(mensaje);
+  }
+  if (!cuerpo || typeof cuerpo !== "object" || !("solicitudes" in cuerpo) ||
+      !Array.isArray(cuerpo.solicitudes)) {
+    throw new Error("El servidor devolvió solicitudes de restaurantes no válidas.");
+  }
+  return cuerpo.solicitudes.flatMap((solicitud): SolicitudRestauranteAdministrada[] => {
+    if (!solicitud || typeof solicitud !== "object") return [];
+    const datos = solicitud as Record<string, unknown>;
+    if (
+      typeof datos.id !== "string" ||
+      typeof datos.nombre !== "string" ||
+      typeof datos.direccion !== "string" ||
+      typeof datos.comida !== "string" ||
+      typeof datos.correoPropietario !== "string" ||
+      typeof datos.certificado !== "string" ||
+      typeof datos.creadoEn !== "string"
+    ) {
+      return [];
+    }
+    return [{
+      id: datos.id,
+      nombre: datos.nombre,
+      direccion: datos.direccion,
+      comida: datos.comida,
+      correoPropietario: datos.correoPropietario,
+      certificado: datos.certificado,
+      creadoEn: datos.creadoEn,
+    }];
+  });
+}
+
 function PanelAdministrador({
   restaurantes,
   cargando,
@@ -1930,6 +2004,12 @@ function PanelAdministrador({
   const [cuentasCargando, setCuentasCargando] = useState(true);
   const [errorCuentas, setErrorCuentas] = useState("");
   const [cuentaEliminando, setCuentaEliminando] = useState<string | null>(null);
+  const [solicitudesRestaurante, setSolicitudesRestaurante] = useState<
+    SolicitudRestauranteAdministrada[]
+  >([]);
+  const [solicitudesCargando, setSolicitudesCargando] = useState(true);
+  const [errorSolicitudes, setErrorSolicitudes] = useState("");
+  const [solicitudAprobando, setSolicitudAprobando] = useState<string | null>(null);
   const restaurantesFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase();
     if (!termino) return restaurantes;
@@ -1978,6 +2058,67 @@ function PanelAdministrador({
       vigente = false;
     };
   }, [usuario]);
+
+  useEffect(() => {
+    let vigente = true;
+    obtenerSolicitudesRestaurante(usuario)
+      .then((solicitudes) => {
+        if (vigente) setSolicitudesRestaurante(solicitudes);
+      })
+      .catch((error: unknown) => {
+        if (vigente) {
+          setErrorSolicitudes(
+            error instanceof Error
+              ? error.message
+              : "No se pudieron cargar las solicitudes de restaurantes.",
+          );
+        }
+      })
+      .finally(() => {
+        if (vigente) setSolicitudesCargando(false);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [usuario]);
+
+  const aprobarSolicitudRestaurante = async (
+    solicitud: SolicitudRestauranteAdministrada,
+  ) => {
+    setSolicitudAprobando(solicitud.id);
+    setErrorSolicitudes("");
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+      if (!apiUrl) {
+        throw new Error("Configura VITE_API_URL para conectar con el servidor.");
+      }
+      const respuesta = await fetch(
+        `${apiUrl}/admin/solicitudes-restaurante/${encodeURIComponent(solicitud.id)}/aprobar`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${await usuario.getIdToken()}` },
+        },
+      );
+      const cuerpo: unknown = await respuesta.json();
+      if (!respuesta.ok) {
+        const mensaje =
+          cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo &&
+          typeof cuerpo.mensaje === "string"
+            ? cuerpo.mensaje
+            : "No se pudo aprobar la solicitud.";
+        throw new Error(mensaje);
+      }
+      setSolicitudesRestaurante((actuales) =>
+        actuales.filter((actual) => actual.id !== solicitud.id),
+      );
+    } catch (error) {
+      setErrorSolicitudes(
+        error instanceof Error ? error.message : "No se pudo aprobar la solicitud.",
+      );
+    } finally {
+      setSolicitudAprobando(null);
+    }
+  };
 
   const eliminarCuenta = async (cuenta: CuentaAdministrada) => {
     if (
@@ -2053,6 +2194,51 @@ function PanelAdministrador({
 
   return (
     <>
+      <section className="admin-listado">
+        <div className="admin-listado-encabezado">
+          <div>
+            <h3>Solicitudes de restaurantes</h3>
+            <p>Revisa los datos y el certificado antes de publicar cada restaurante.</p>
+          </div>
+          <span className="admin-categorias">
+            {solicitudesRestaurante.length} pendientes
+          </span>
+        </div>
+        {errorSolicitudes && <p className="aviso" role="alert">{errorSolicitudes}</p>}
+        {solicitudesCargando ? (
+          <p className="aviso">Cargando solicitudes...</p>
+        ) : solicitudesRestaurante.length === 0 ? (
+          <p className="aviso">No hay solicitudes pendientes de revisión.</p>
+        ) : (
+          <div className="admin-solicitudes">
+            {solicitudesRestaurante.map((solicitud) => (
+              <article className="admin-solicitud" key={solicitud.id}>
+                <div>
+                  <h4>{solicitud.nombre}</h4>
+                  <p>{solicitud.comida} · {solicitud.direccion}</p>
+                  <small>
+                    Responsable: {solicitud.correoPropietario}
+                    {solicitud.creadoEn
+                      ? ` · Recibida el ${new Date(solicitud.creadoEn).toLocaleDateString("es-CO")}`
+                      : ""}
+                  </small>
+                  <a href={solicitud.certificado} target="_blank" rel="noreferrer">
+                    Revisar certificado ↗
+                  </a>
+                </div>
+                <button
+                  className="boton boton-vino"
+                  type="button"
+                  disabled={solicitudAprobando !== null}
+                  onClick={() => void aprobarSolicitudRestaurante(solicitud)}
+                >
+                  {solicitudAprobando === solicitud.id ? "Publicando..." : "Aprobar y publicar"}
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
       <div className="admin-estadisticas">
         <article>
           <span>Cuentas de comensales</span>
@@ -2387,6 +2573,7 @@ function App() {
             return publico
               ? {
                   ...restaurante,
+                  estado: "aprobado",
                   mesasPorTurno: publico.mesasPorTurno,
                   diasNoDisponibles: publico.diasNoDisponibles,
                   fechasNoDisponibles: publico.fechasNoDisponibles,
@@ -2554,25 +2741,6 @@ function App() {
         const restaurantesRemotos = negocios.docs.map((negocio) =>
           normalizarRestaurante(negocio.id, negocio.data()),
         );
-        if (restaurantesRemotos.length > 0) {
-          const db = baseDatos;
-          const lotePublico = writeBatch(db);
-          restaurantesRemotos.forEach((restaurante) => {
-            lotePublico.set(
-              doc(db, "restaurantesPublicos", restaurante.id),
-              {
-                nombre: restaurante.nombre,
-                direccion: restaurante.direccion,
-                comida: restaurante.comida,
-                propietario: usuario.uid,
-                mesasPorTurno: restaurante.mesasPorTurno,
-                diasNoDisponibles: restaurante.diasNoDisponibles,
-                fechasNoDisponibles: restaurante.fechasNoDisponibles,
-              },
-            );
-          });
-          await lotePublico.commit();
-        }
         const restaurantesPorId = new Map(
           negociosLocales.map((restaurante) => [restaurante.id, restaurante]),
         );
@@ -3098,6 +3266,8 @@ function App() {
       comida: formularioRestaurante.comida.trim(),
       certificado: urlCertificado,
       propietario: propietario.uid,
+      correoPropietario: propietario.email ?? "",
+      estado: "pendiente",
       menu: [],
       menuPdfUrl: "",
       menuPdfNombre: "",
@@ -3111,25 +3281,9 @@ function App() {
     }
     const db = baseDatos;
     const referenciaRestaurante = doc(collection(db, "restaurantes"));
-    const referenciaPublica = doc(
-      db,
-      "restaurantesPublicos",
-      referenciaRestaurante.id,
-    );
-    const loteRegistro = writeBatch(db);
-    loteRegistro.set(referenciaRestaurante, datosRestaurante);
-    loteRegistro.set(referenciaPublica, {
-      nombre: datosRestaurante.nombre,
-      direccion: datosRestaurante.direccion,
-      comida: datosRestaurante.comida,
-      propietario: propietario.uid,
-      mesasPorTurno: 10,
-      diasNoDisponibles: [],
-      fechasNoDisponibles: [],
-    });
     await esperarConLimite(
-      loteRegistro.commit(),
-      "Firestore tardó demasiado al publicar el restaurante.",
+      setDoc(referenciaRestaurante, datosRestaurante),
+      "Firestore tardó demasiado al registrar la solicitud.",
     );
     const nuevoRestaurante = normalizarRestaurante(
       referenciaRestaurante.id,
@@ -3251,14 +3405,14 @@ function App() {
                 credencial.user,
               );
               mensajeCreacion =
-                "Tu cuenta y restaurante fueron creados. La solicitud fue enviada a essillalibre@gmail.com.";
+                  "Tu cuenta y solicitud fueron creadas. El restaurante está pendiente de aprobación y notificamos al administrador.";
             } catch (error) {
               const detalle =
                 error instanceof Error
                   ? error.message
                   : "No se pudo conectar con el servidor de correo.";
               mensajeCreacion =
-                `Tu cuenta y restaurante fueron creados, pero no se envió el correo a essillalibre@gmail.com: ${detalle}`;
+                  `Tu solicitud quedó pendiente de aprobación, pero no se pudo enviar la notificación por correo: ${detalle}`;
             }
           } catch {
             mensajeCreacion =
@@ -3321,53 +3475,22 @@ function App() {
     }
     setCargando(true);
     setMensaje("Guardando los datos del restaurante...");
-    let guardadoEnFirebase = false;
-    let mensajeGuardadoLocal = "";
     try {
       await guardarRestaurantePropietario(usuario);
-      guardadoEnFirebase = true;
     } catch (error) {
-      const idLocal = `local-${crypto.randomUUID()}`;
-      const restauranteLocal = normalizarRestaurante(idLocal, {
-        nombre: formularioRestaurante.nombre.trim(),
-        direccion: datosFormulario.direccion.trim(),
-        comida: datosFormulario.comida.trim(),
-        certificado: datosFormulario.certificado.name,
-        menu: [],
-      });
-      try {
-        const restaurantesLocales = [
-          ...leerRestaurantesLocales(usuario.uid),
-          restauranteLocal,
-        ];
-        localStorage.setItem(
-          `silla-libre-restaurantes-${usuario.uid}`,
-          JSON.stringify(restaurantesLocales),
-        );
-        localStorage.setItem(
-          `silla-libre-perfil-${usuario.uid}`,
-          JSON.stringify({
-            ...leerPerfilGuardado(usuario.uid),
-            tipo: "restaurante",
-          }),
-        );
-        setRestaurantesPropietario(restaurantesLocales);
-        setTipoUsuario("restaurante");
-        setFormularioRestaurante(restauranteInicial);
-        mensajeGuardadoLocal =
-          `Los datos quedaron guardados solo en este dispositivo. Firebase no pudo guardarlos: ${error instanceof Error ? error.message : "error de conexión"}.`;
-      } catch {
-        setMensaje("No se pudo guardar la información ni siquiera en este dispositivo. Revisa el espacio disponible e inténtalo de nuevo.");
-        return;
-      }
+      setMensaje(
+        error instanceof Error
+          ? `No se pudo registrar la solicitud en Firebase: ${error.message}`
+          : "No se pudo registrar la solicitud en Firebase.",
+      );
+      setCargando(false);
+      return;
     }
     setMensaje("Enviando la solicitud y el certificado al correo de Silla Libre...");
     try {
       await enviarSolicitudPorCorreo(datosFormulario, usuario);
       setMensaje(
-        guardadoEnFirebase
-          ? "Restaurante guardado y solicitud enviada a essillalibre@gmail.com."
-          : `Solicitud enviada a essillalibre@gmail.com. ${mensajeGuardadoLocal}`,
+        "Solicitud guardada y pendiente de aprobación. Se notificó al administrador.",
       );
     } catch (error) {
       const detalle =
@@ -3377,7 +3500,7 @@ function App() {
             : error.message
           : "No fue posible conectar con el servidor de correo.";
       setMensaje(
-        `${guardadoEnFirebase ? "El restaurante quedó guardado en Firebase" : "El restaurante quedó guardado solo en este dispositivo"}, pero no se envió el correo: ${detalle}`,
+        `La solicitud quedó guardada y pendiente de aprobación, pero no se pudo enviar la notificación por correo: ${detalle}`,
       );
     } finally {
       setCargando(false);

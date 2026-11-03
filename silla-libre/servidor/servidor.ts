@@ -36,7 +36,20 @@ interface SolicitudRestaurante {
 
 const puerto = Number(process.env.PUERTO ?? 3001);
 const remitente = process.env.CORREO_REMITENTE ?? "reservas@sillalibre.co";
-const destinatario = process.env.CORREO_SOLICITUDES ?? "essillalibre@gmail.com";
+const correoAdministrador = (
+  process.env.ADMIN_EMAIL ?? process.env.VITE_ADMIN_EMAIL ?? ""
+).trim().toLowerCase();
+const destinatariosSolicitud = [
+  ...new Set(
+    [
+      process.env.CORREO_SOLICITUDES,
+      correoAdministrador,
+    ].flatMap((correo) => (correo?.trim() ? [correo.trim()] : [])),
+  ),
+];
+if (destinatariosSolicitud.length === 0) {
+  destinatariosSolicitud.push("essillalibre@gmail.com");
+}
 const transportador =
   process.env.SMTP_HOST && process.env.SMTP_USUARIO && process.env.SMTP_CONTRASEÑA
     ? nodemailer.createTransport({
@@ -54,9 +67,6 @@ const ventanaLimite = 15 * 60 * 1000;
 const maxSolicitudesPorVentana = 5;
 const maximoCuerpo = 14 * 1024 * 1024;
 const maximoArchivo = 10 * 1024 * 1024;
-const correoAdministrador = (
-  process.env.ADMIN_EMAIL ?? process.env.VITE_ADMIN_EMAIL ?? ""
-).trim().toLowerCase();
 
 class ErrorHttp extends Error {
   constructor(
@@ -182,6 +192,84 @@ async function listarCuentasAdministrador() {
       registrosPorMes: meses,
     },
   };
+}
+
+async function listarSolicitudesRestauranteAdministrador() {
+  const { baseDatos } = serviciosFirebaseAdmin();
+  const solicitudes = await baseDatos
+    .collection("restaurantes")
+    .where("estado", "==", "pendiente")
+    .get();
+  return {
+    solicitudes: solicitudes.docs.flatMap((solicitud) => {
+      const datos = solicitud.data();
+      const fecha = datos.creadoEn?.toDate?.();
+      if (
+        typeof datos.nombre !== "string" ||
+        typeof datos.direccion !== "string" ||
+        typeof datos.comida !== "string" ||
+        typeof datos.correoPropietario !== "string" ||
+        typeof datos.certificado !== "string"
+      ) {
+        return [];
+      }
+      return [{
+        id: solicitud.id,
+        nombre: datos.nombre,
+        direccion: datos.direccion,
+        comida: datos.comida,
+        correoPropietario: datos.correoPropietario,
+        certificado: datos.certificado,
+        creadoEn: fecha instanceof Date ? fecha.toISOString() : "",
+      }];
+    }),
+  };
+}
+
+async function aprobarSolicitudRestauranteAdministrador(restauranteId: string) {
+  const { baseDatos } = serviciosFirebaseAdmin();
+  const referenciaRestaurante = baseDatos.collection("restaurantes").doc(restauranteId);
+  const referenciaPublica = baseDatos
+    .collection("restaurantesPublicos")
+    .doc(restauranteId);
+
+  await baseDatos.runTransaction(async (transaccion) => {
+    const restaurante = await transaccion.get(referenciaRestaurante);
+    if (!restaurante.exists) {
+      throw new ErrorHttp(404, "La solicitud de restaurante ya no existe.");
+    }
+    const datos = restaurante.data();
+    if (datos?.estado !== "pendiente") {
+      throw new ErrorHttp(409, "La solicitud ya fue atendida.");
+    }
+    if (
+      typeof datos.nombre !== "string" ||
+      typeof datos.direccion !== "string" ||
+      typeof datos.comida !== "string" ||
+      typeof datos.propietario !== "string"
+    ) {
+      throw new ErrorHttp(400, "Los datos de la solicitud no son válidos.");
+    }
+
+    transaccion.update(referenciaRestaurante, {
+      estado: "aprobado",
+      aprobadoEn: new Date(),
+    });
+    transaccion.set(referenciaPublica, {
+      nombre: datos.nombre,
+      direccion: datos.direccion,
+      comida: datos.comida,
+      propietario: datos.propietario,
+      mesasPorTurno:
+        typeof datos.mesasPorTurno === "number" ? datos.mesasPorTurno : 10,
+      diasNoDisponibles: Array.isArray(datos.diasNoDisponibles)
+        ? datos.diasNoDisponibles
+        : [],
+      fechasNoDisponibles: Array.isArray(datos.fechasNoDisponibles)
+        ? datos.fechasNoDisponibles
+        : [],
+    });
+  });
 }
 
 async function eliminarCuentaAdministrador(uid: string, administradorUid: string) {
@@ -397,11 +485,43 @@ const servidor = createServer(async (solicitud, respuestaHttp) => {
     return;
   }
   const ruta = new URL(solicitud.url ?? "/", "http://localhost").pathname;
-  if (ruta === "/admin/cuentas" || ruta.startsWith("/admin/cuentas/")) {
+  if (
+    ruta === "/admin/cuentas" ||
+    ruta.startsWith("/admin/cuentas/") ||
+    ruta === "/admin/solicitudes-restaurante" ||
+    ruta.startsWith("/admin/solicitudes-restaurante/")
+  ) {
     try {
       const administrador = await verificarAdministrador(solicitud);
       if (solicitud.method === "GET" && ruta === "/admin/cuentas") {
         responder(respuestaHttp, 200, await listarCuentasAdministrador());
+        return;
+      }
+      if (
+        solicitud.method === "GET" &&
+        ruta === "/admin/solicitudes-restaurante"
+      ) {
+        responder(
+          respuestaHttp,
+          200,
+          await listarSolicitudesRestauranteAdministrador(),
+        );
+        return;
+      }
+      const coincidenciaSolicitud = ruta.match(
+        /^\/admin\/solicitudes-restaurante\/([^/]+)\/aprobar$/,
+      );
+      if (solicitud.method === "POST" && coincidenciaSolicitud) {
+        let restauranteId: string;
+        try {
+          restauranteId = decodeURIComponent(coincidenciaSolicitud[1]);
+        } catch {
+          throw new ErrorHttp(400, "El identificador del restaurante no es válido.");
+        }
+        await aprobarSolicitudRestauranteAdministrador(restauranteId);
+        responder(respuestaHttp, 200, {
+          mensaje: "Restaurante aprobado y publicado.",
+        });
         return;
       }
       const coincidencia = ruta.match(/^\/admin\/cuentas\/([^/]+)$/);
@@ -527,7 +647,7 @@ const servidor = createServer(async (solicitud, respuestaHttp) => {
     }
     await transportador!.sendMail({
       from: remitente,
-      to: destinatario,
+      to: destinatariosSolicitud,
       replyTo: solicitudRestaurante.correoPropietario,
       subject: `Solicitud de restaurante: ${solicitudRestaurante.nombre}`,
       text: [
