@@ -5,7 +5,10 @@ export interface Restaurante {
     locacion: string;
     rangoprecios: string;
     rating: number;
+    cantidadResenasBase?: number;
+    horario?: string;
     imagen: string;
     descripcion: string;
     urlreserva: string;
+    urlMenu?: string;
 }

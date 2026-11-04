@@ -307,6 +307,7 @@ function DetalleRestaurante({
   usuario,
   iniciarSesion,
   volver,
+  registrarCalificacionLocal,
 }: {
   restaurante: Restaurante;
   favorito: boolean;
@@ -315,53 +316,45 @@ function DetalleRestaurante({
   usuario: User | null;
   iniciarSesion: () => void;
   volver: () => void;
+  registrarCalificacionLocal: (
+    restauranteId: number | string,
+    calificacion: number,
+  ) => void;
 }) {
   const [pestaña, setPestaña] = useState<"acerca" | "menu" | "resenas">(
     "acerca",
   );
   const [seleccionReserva, setSeleccionReserva] =
     useState<FormularioReserva>(reservaInicial);
-  const [resenas, setResenas] = useState<ResenaRestaurante[]>([]);
+  const [resenas, setResenas] = useState<ResenaRestaurante[]>(() =>
+    baseDatos ? [] : leerResenasLocales(restaurante.id),
+  );
   const [calificacion, setCalificacion] = useState(0);
   const [comentario, setComentario] = useState("");
-  const [resenasCargando, setResenasCargando] = useState(true);
+  const [resenasCargando, setResenasCargando] = useState(Boolean(baseDatos));
   const [resenaEnviando, setResenaEnviando] = useState(false);
   const [mensajeResena, setMensajeResena] = useState("");
 
   useEffect(() => {
-    let vigente = true;
-    const cargarResenas = async () => {
-      setResenasCargando(true);
-      setMensajeResena("");
-      try {
-        if (baseDatos) {
-          const resultado = await getDocs(
-            query(
-              collection(baseDatos, "resenas"),
-              where("restauranteId", "==", restaurante.id),
-            ),
-          );
-          const cargadas = resultado.docs.flatMap((documento) => {
-            const datos = documento.data();
-            const resena = normalizarResena(documento.id, datos);
-            return resena ? [resena] : [];
-          });
-          if (vigente) setResenas(cargadas);
-        } else if (vigente) {
-          setResenas(leerResenasLocales(restaurante.id));
-        }
-      } catch (error) {
-        if (vigente) {
-          setMensajeResena(mensajeErrorResena(error, "leer"));
-        }
-      } finally {
-        if (vigente) setResenasCargando(false);
-      }
-    };
-    void cargarResenas();
-    return () => {
-      vigente = false;
-    };
+    if (!baseDatos) return;
+    return onSnapshot(
+      query(
+        collection(baseDatos, "resenas"),
+        where("restauranteId", "==", restaurante.id),
+      ),
+      (resultado) => {
+        const cargadas = resultado.docs.flatMap((documento) => {
+          const resena = normalizarResena(documento.id, documento.data());
+          return resena ? [resena] : [];
+        });
+        setResenas(cargadas);
+        setResenasCargando(false);
+      },
+      (error) => {
+        setMensajeResena(mensajeErrorResena(error, "leer"));
+        setResenasCargando(false);
+      },
+    );
   }, [restaurante.id]);
 
   const enviarResena = async (evento: React.FormEvent<HTMLFormElement>) => {
@@ -412,8 +405,11 @@ function DetalleRestaurante({
           `silla-libre-resenas-${restaurante.id}`,
           JSON.stringify([nuevaResena, ...existentes]),
         );
+        registrarCalificacionLocal(restaurante.id, calificacion);
       }
-      setResenas((existentes) => [nuevaResena, ...existentes]);
+      if (!baseDatos) {
+        setResenas((existentes) => [nuevaResena, ...existentes]);
+      }
       setCalificacion(0);
       setComentario("");
       setMensajeResena(
@@ -428,10 +424,16 @@ function DetalleRestaurante({
     }
   };
 
-  const promedioResenas = resenas.length
+  const promedioResenasSillaLibre = resenas.length
     ? resenas.reduce((total, resena) => total + resena.calificacion, 0) /
       resenas.length
-    : restaurante.rating;
+    : 0;
+  const promedioResenas = combinarCalificacion(
+    restaurante.rating,
+    restaurante.cantidadResenasBase ?? 0,
+    promedioResenasSillaLibre,
+    resenas.length,
+  );
   const consultaUbicacion = `${restaurante.nombre}, ${restaurante.locacion}, Bogotá, Colombia`;
   const ubicacionGoogleMaps = encodeURIComponent(consultaUbicacion);
   return (
@@ -458,6 +460,11 @@ function DetalleRestaurante({
                   ? `${resenas.length} ${resenas.length === 1 ? "reseña" : "reseñas"}`
                   : "Calificación de Silla Libre"}
               </p>
+              {restaurante.horario && (
+                <p className="detalle-horario">
+                  <strong>Horario:</strong> {restaurante.horario}
+                </p>
+              )}
             </div>
             <button
               className={`favorito detalle-favorito ${favorito ? "activo" : ""}`}
@@ -516,7 +523,19 @@ function DetalleRestaurante({
               <>
                 <h2>Menú</h2>
                 <p>Consulta la carta y descubre los sabores de {restaurante.nombre}.</p>
-                <p className="aviso">El menú de este restaurante estará disponible próximamente.</p>
+                {restaurante.urlMenu ? (
+                  <a
+                    href={restaurante.urlMenu}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Ver carta de {restaurante.nombre} (PDF) ↗
+                  </a>
+                ) : (
+                  <p className="aviso">
+                    El menú de este restaurante estará disponible próximamente.
+                  </p>
+                )}
               </>
             )}
             {pestaña === "resenas" && (
@@ -735,6 +754,21 @@ interface ResenaRestaurante {
   calificacion: number;
   comentario: string;
   creadoEn: string;
+}
+
+function combinarCalificacion(
+  calificacionBase: number,
+  cantidadResenasBase: number,
+  promedioResenas: number,
+  cantidadResenas: number,
+): number {
+  if (cantidadResenas === 0) return calificacionBase;
+  if (cantidadResenasBase === 0) return promedioResenas;
+  return (
+    (calificacionBase * cantidadResenasBase +
+      promedioResenas * cantidadResenas) /
+    (cantidadResenasBase + cantidadResenas)
+  );
 }
 
 function mensajeErrorResena(
@@ -2463,6 +2497,9 @@ function App() {
   const [restaurantesPublicos, setRestaurantesPublicos] = useState<
     RestauranteReservable[]
   >([]);
+  const [calificacionesEnVivo, setCalificacionesEnVivo] = useState<
+    Record<string, { promedio: number; total: number }>
+  >({});
   const [restaurantesPublicosCargando, setRestaurantesPublicosCargando] =
     useState(true);
   const [disponibilidadActiva, setDisponibilidadActiva] =
@@ -2479,6 +2516,38 @@ function App() {
     () => [...restaurantes, ...restaurantesPublicos],
     [restaurantesPublicos],
   );
+
+  useEffect(() => {
+    if (!baseDatos) return;
+    return onSnapshot(
+      collection(baseDatos, "resenas"),
+      (resultado) => {
+        const totales: Record<string, { suma: number; total: number }> = {};
+        resultado.docs.forEach((documento) => {
+          const resena = normalizarResena(documento.id, documento.data());
+          if (!resena) return;
+          const id = String(resena.restauranteId);
+          const actual = totales[id] ?? { suma: 0, total: 0 };
+          actual.suma += resena.calificacion;
+          actual.total += 1;
+          totales[id] = actual;
+        });
+        setCalificacionesEnVivo(
+          Object.fromEntries(
+            Object.entries(totales).map(([id, datos]) => [
+              id,
+              { promedio: datos.suma / datos.total, total: datos.total },
+            ]),
+          ),
+        );
+      },
+      (error) => {
+        setMensaje(
+          `No pudimos actualizar las calificaciones en tiempo real: ${mensajeErrorResena(error, "leer")}`,
+        );
+      },
+    );
+  }, []);
 
   useEffect(() => {
     const sincronizarRuta = () => {
@@ -4198,6 +4267,11 @@ function App() {
     mesasRestantes !== null &&
     mesasRestantes < 1;
   const turnoNoDisponible = fechaBloqueada || turnoSinMesas;
+  const nombreVisibleUsuario =
+    [nombreUsuario.trim(), apellidoUsuario.trim()].filter(Boolean).join(" ") ||
+    usuario?.displayName ||
+    usuario?.email ||
+    "";
 
   return (
     <div className="aplicacion">
@@ -4245,10 +4319,10 @@ function App() {
                         alt=""
                       />
                     ) : (
-                      (usuario.displayName ?? usuario.email)?.slice(0, 1).toUpperCase()
+                      nombreVisibleUsuario.slice(0, 1).toUpperCase()
                     )}
                   </span>{" "}
-                  {usuario.displayName || usuario.email}
+                  {nombreVisibleUsuario}
                 </button>
               ) : (
                 <button className="enlace-boton" onClick={() => mostrarAcceso()}>
@@ -4482,7 +4556,17 @@ function App() {
                         {restaurante.nombre}
                       </button>
                     </h3>
-                    <span className="calificacion">★ {restaurante.rating}</span>
+                    <span className="calificacion">
+                      ★{" "}
+                      {combinarCalificacion(
+                        restaurante.rating,
+                        restaurante.cantidadResenasBase ?? 0,
+                        calificacionesEnVivo[String(restaurante.id)]?.promedio ??
+                          0,
+                        calificacionesEnVivo[String(restaurante.id)]?.total ??
+                          0,
+                      ).toFixed(1)}
+                    </span>
                   </div>
                   <p className="ubicacion">
                     ⌖ {restaurante.locacion}, Bogotá <span>·</span>{" "}
@@ -4565,6 +4649,22 @@ function App() {
             usuario={usuario}
             iniciarSesion={() => mostrarAcceso()}
             volver={volverAListaRestaurantes}
+            registrarCalificacionLocal={(restauranteId, nuevaCalificacion) =>
+              setCalificacionesEnVivo((actuales) => {
+                const id = String(restauranteId);
+                const actual = actuales[id] ?? { promedio: 0, total: 0 };
+                const total = actual.total + 1;
+                return {
+                  ...actuales,
+                  [id]: {
+                    promedio:
+                      (actual.promedio * actual.total + nuevaCalificacion) /
+                      total,
+                    total,
+                  },
+                };
+              })
+            }
           />
         ) : (
           <section className="perfil-seccion">
