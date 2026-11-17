@@ -36,9 +36,10 @@ interface SolicitudRestaurante {
 
 const puerto = Number(process.env.PUERTO ?? 3001);
 const remitente = process.env.CORREO_REMITENTE ?? "reservas@sillalibre.co";
-const correoAdministrador = (
-  process.env.ADMIN_EMAIL ?? process.env.VITE_ADMIN_EMAIL ?? ""
-).trim().toLowerCase();
+const correoAdministrador =
+  process.env.ADMIN_EMAIL?.trim().toLowerCase() ||
+  process.env.VITE_ADMIN_EMAIL?.trim().toLowerCase() ||
+  "ronald.lopezc@uniagustiniana.edu.co";
 const destinatariosSolicitud = [
   ...new Set(
     [
