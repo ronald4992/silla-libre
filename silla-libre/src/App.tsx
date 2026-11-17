@@ -2976,6 +2976,14 @@ function App() {
     setVista("panel-admin");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const abrirPanelAdminSiCorresponde = (usuarioAutenticado: User) => {
+    if (
+      correoAdministrador &&
+      usuarioAutenticado.email?.trim().toLowerCase() === correoAdministrador
+    ) {
+      abrirPanelAdmin();
+    }
+  };
   const usuarioEsAdministrador = Boolean(
     correoAdministrador &&
       usuario?.email?.trim().toLowerCase() === correoAdministrador,
@@ -3406,7 +3414,11 @@ function App() {
     setCargando(true);
     setMensaje("");
     try {
-      await signInWithPopup(autenticacion, new GoogleAuthProvider());
+      const credencial = await signInWithPopup(
+        autenticacion,
+        new GoogleAuthProvider(),
+      );
+      abrirPanelAdminSiCorresponde(credencial.user);
       setModal(null);
     } catch (error) {
       setMensaje(mensajeErrorAcceso(error));
@@ -3508,7 +3520,12 @@ function App() {
         setModal(null);
         setMensaje(mensajeCreacion);
       } else {
-        await signInWithEmailAndPassword(autenticacion, correo, contraseña);
+        const credencial = await signInWithEmailAndPassword(
+          autenticacion,
+          correo,
+          contraseña,
+        );
+        abrirPanelAdminSiCorresponde(credencial.user);
         setModal(null);
       }
     } catch (error) {
