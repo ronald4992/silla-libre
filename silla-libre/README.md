@@ -102,10 +102,11 @@ El panel está disponible en `/admin`; muestra las estadísticas de registro
 mensuales, permite administrar cuentas y restaurantes publicados y muestra las
 solicitudes de registro pendientes para que el administrador revise el
 certificado y las apruebe. Al aprobar una solicitud, el servidor publica el
-restaurante en el directorio principal. Para usar
-la gestión de cuentas, configura `VITE_ADMIN_EMAIL` para mostrar el acceso y
-`ADMIN_EMAIL` en el servidor para autorizar operaciones. Ambos deben contener
-el correo administrador. La cuenta debe existir en Firebase Authentication,
+restaurante en el directorio principal. El correo
+`ronald.lopezc@uniagustiniana.edu.co` tiene acceso de administrador por defecto.
+Puedes cambiarlo con `VITE_ADMIN_EMAIL` para mostrar el acceso y `ADMIN_EMAIL`
+en el servidor para autorizar operaciones; ambas variables deben contener el
+mismo correo. La cuenta debe existir en Firebase Authentication,
 iniciar sesión y tener el correo verificado.
 
 La gestión de cuentas requiere el servidor Node.js (`npm run servidor`) y

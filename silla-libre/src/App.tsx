@@ -1430,7 +1430,8 @@ type VistaPagina =
   | "perfil-usuario"
   | "perfil-restaurante";
 const correoAdministrador =
-  import.meta.env.VITE_ADMIN_EMAIL?.trim().toLowerCase() ?? "";
+  import.meta.env.VITE_ADMIN_EMAIL?.trim().toLowerCase() ||
+  "ronald.lopezc@uniagustiniana.edu.co";
 const reservaInicial: FormularioReserva = {
   fecha: "",
   hora: "",
